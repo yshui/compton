@@ -25,7 +25,6 @@
 #include "list.h"
 #include "log.h"
 #include "region.h"
-#include "render.h"
 #include "string_utils.h"
 #include "types.h"
 #include "uthash_extra.h"
@@ -34,11 +33,6 @@
 
 #ifdef CONFIG_DBUS
 #include "dbus.h"
-#endif
-
-#ifdef CONFIG_OPENGL
-// TODO remove this include
-#include "opengl.h"
 #endif
 
 #include "win.h"
@@ -926,7 +920,6 @@ void win_on_win_size_change(session_t *ps, struct managed_win *w) {
 	} else {
 		assert(w->state == WSTATE_UNMAPPED);
 	}
-	free_paint(ps, &w->shadow_paint);
 }
 
 /**
@@ -1070,12 +1063,6 @@ void free_win_res(session_t *ps, struct managed_win *w) {
 	// No need to call backend release_image here because
 	// finish_unmap_win should've done that for us.
 	// XXX unless we are called by session_destroy
-	// assert(w->win_data == NULL);
-	free_win_res_glx(ps, w);
-	free_paint(ps, &w->paint);
-	free_paint(ps, &w->shadow_paint);
-	// Above should be done during unmapping
-	// Except when we are called by session_destroy
 
 	pixman_region32_fini(&w->bounding_shape);
 	// BadDamage may be thrown if the window is destroyed
@@ -1207,10 +1194,6 @@ struct win *fill_win(session_t *ps, struct win *w) {
 	    .class_instance = NULL,
 	    .class_general = NULL,
 	    .role = NULL,
-
-	    // Initialized during paint
-	    .paint = PAINT_INIT,
-	    .shadow_paint = PAINT_INIT,
 	};
 
 	assert(!w->destroyed);
@@ -1566,8 +1549,6 @@ void win_update_bounding_shape(session_t *ps, struct managed_win *w) {
 		w->flags |= WIN_FLAGS_IMAGES_STALE;
 		ps->pending_updates = true;
 	}
-	free_paint(ps, &w->paint);
-	free_paint(ps, &w->shadow_paint);
 
 	win_on_factor_change(ps, w);
 }
@@ -1672,9 +1653,6 @@ static void unmap_win_finish(session_t *ps, struct managed_win *w) {
 		assert(!w->win_image);
 		assert(!w->shadow_image);
 	}
-
-	free_paint(ps, &w->paint);
-	free_paint(ps, &w->shadow_paint);
 
 	// Try again at binding images when the window is mapped next time
 	w->flags &= ~WIN_FLAGS_IMAGE_ERROR;
@@ -2017,8 +1995,7 @@ void map_win_start(session_t *ps, struct managed_win *w) {
 	}
 
 	assert(w->state == WSTATE_UNMAPPED);
-	assert((w->flags & WIN_FLAGS_IMAGES_NONE) == WIN_FLAGS_IMAGES_NONE ||
-	       !ps->o.experimental_backends);
+	assert((w->flags & WIN_FLAGS_IMAGES_NONE) == WIN_FLAGS_IMAGES_NONE);
 
 	// We stopped processing window size change when we were unmapped, refresh the
 	// size of the window

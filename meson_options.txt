@@ -2,8 +2,6 @@ option('sanitize', type: 'boolean', value: false, description: 'Compile compton 
 option('config_file', type: 'boolean', value: true, description: 'Enable config file support')
 option('regex', type: 'boolean', value: true, description: 'Enable regex support in window conditions')
 
-option('vsync_drm', type: 'boolean', value: false, description: 'Enable support for using drm for vsync')
-
 option('opengl', type: 'boolean', value: true, description: 'Enable features that require opengl (opengl backend, and opengl vsync methods)')
 option('dbus', type: 'boolean', value: true, description: 'Enable support for D-Bus remote control')
 

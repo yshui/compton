@@ -327,6 +327,7 @@ struct log_target *stderr_logger_new(void) {
 	return &ret->tgt;
 }
 
+// TODO: move this to gl_common.c
 #ifdef CONFIG_OPENGL
 /// An opengl logger that can be used for logging into opengl debugging tools,
 /// such as apitrace

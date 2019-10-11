@@ -35,16 +35,12 @@
 #include "config.h"
 #include "err.h"
 #include "kernel.h"
-#ifdef CONFIG_OPENGL
-#include "opengl.h"
-#endif
 #include "backend/backend.h"
 #include "c2.h"
 #include "config.h"
 #include "diagnostic.h"
 #include "log.h"
 #include "region.h"
-#include "render.h"
 #include "types.h"
 #include "utils.h"
 #include "win.h"
@@ -497,11 +493,6 @@ static struct managed_win *paint_preprocess(session_t *ps, bool *fade_running) {
 			rc_region_unref(&w->reg_ignore);
 		}
 
-		// Clear flags if we are not using experimental backends
-		if (!ps->o.experimental_backends) {
-			w->flags = 0;
-		}
-
 		// log_trace("%d %d %s", w->a.map_state, w->ever_damaged, w->name);
 
 		// Give up if it's not damaged or invisible, or it's unmapped and its
@@ -653,6 +644,7 @@ static void rebuild_shadow_exclude_reg(session_t *ps) {
 
 /// Free up all the images and deinit the backend
 static void destroy_backend(session_t *ps) {
+	assert(ps->backend_data);
 	win_stack_foreach_managed_safe(w, &ps->window_stack) {
 		// Wrapping up fading in progress
 		if (win_skip_fading(ps, w)) {
@@ -660,32 +652,27 @@ static void destroy_backend(session_t *ps) {
 			continue;
 		}
 
-		if (ps->backend_data) {
-			if (w->state == WSTATE_MAPPED) {
-				win_release_images(ps->backend_data, w);
-			} else {
-				assert(!w->win_image);
-				assert(!w->shadow_image);
-			}
+		if (w->state == WSTATE_MAPPED) {
+			win_release_images(ps->backend_data, w);
+		} else {
+			assert(!w->win_image);
+			assert(!w->shadow_image);
 		}
-		free_paint(ps, &w->paint);
 	}
 
-	if (ps->backend_data && ps->root_image) {
+	if (ps->root_image) {
 		ps->backend_data->ops->release_image(ps->backend_data, ps->root_image);
 		ps->root_image = NULL;
 	}
 
-	if (ps->backend_data) {
-		// deinit backend
-		if (ps->backend_blur_context) {
-			ps->backend_data->ops->destroy_blur_context(
-			    ps->backend_data, ps->backend_blur_context);
-			ps->backend_blur_context = NULL;
-		}
-		ps->backend_data->ops->deinit(ps->backend_data);
-		ps->backend_data = NULL;
+	// deinit backend
+	if (ps->backend_blur_context) {
+		ps->backend_data->ops->destroy_blur_context(ps->backend_data,
+		                                            ps->backend_blur_context);
+		ps->backend_blur_context = NULL;
 	}
+	ps->backend_data->ops->deinit(ps->backend_data);
+	ps->backend_data = NULL;
 }
 
 static bool initialize_blur(session_t *ps) {
@@ -719,59 +706,54 @@ static bool initialize_blur(session_t *ps) {
 
 /// Init the backend and bind all the window pixmap to backend images
 static bool initialize_backend(session_t *ps) {
-	if (ps->o.experimental_backends) {
-		assert(!ps->backend_data);
-		// Reinitialize win_data
-		if (backend_list[ps->o.backend]) {
-			ps->backend_data = backend_list[ps->o.backend]->init(ps);
-		} else {
-			log_error("Backend \"%s\" is not available as part of the "
-			          "experimental backends.",
-			          BACKEND_STRS[ps->o.backend]);
-		}
-		if (!ps->backend_data) {
-			log_fatal("Failed to initialize backend, aborting...");
-			quit_compton(ps);
-			return false;
-		}
-		ps->backend_data->ops = backend_list[ps->o.backend];
+	assert(!ps->backend_data);
+	// Reinitialize win_data
+	if (backend_list[ps->o.backend]) {
+		ps->backend_data = backend_list[ps->o.backend]->init(ps);
+	} else {
+		log_error("Backend \"%s\" is not available", BACKEND_STRS[ps->o.backend]);
+	}
+	if (!ps->backend_data) {
+		log_fatal("Failed to initialize backend, aborting...");
+		quit_compton(ps);
+		return false;
+	}
+	ps->backend_data->ops = backend_list[ps->o.backend];
 
-		if (!initialize_blur(ps)) {
-			log_fatal("Failed to prepare for background blur, aborting...");
-			ps->backend_data->ops->deinit(ps->backend_data);
-			ps->backend_data = NULL;
-			quit_compton(ps);
-			return false;
-		}
+	if (!initialize_blur(ps)) {
+		log_fatal("Failed to prepare for background blur, aborting...");
+		ps->backend_data->ops->deinit(ps->backend_data);
+		ps->backend_data = NULL;
+		quit_compton(ps);
+		return false;
+	}
 
-		// window_stack shouldn't include window that's
-		// not in the hash table at this point. Since
-		// there cannot be any fading windows.
-		HASH_ITER2(ps->windows, _w) {
-			if (!_w->managed) {
-				continue;
+	// window_stack shouldn't include window that's
+	// not in the hash table at this point. Since
+	// there cannot be any fading windows.
+	HASH_ITER2(ps->windows, _w) {
+		if (!_w->managed) {
+			continue;
+		}
+		auto w = (struct managed_win *)_w;
+		assert(w->state == WSTATE_MAPPED || w->state == WSTATE_UNMAPPED);
+		if (w->state == WSTATE_MAPPED) {
+			// We need to reacquire image
+			log_debug("Marking window %#010x (%s) for update after "
+			          "redirection",
+			          w->base.id, w->name);
+			if (w->shadow) {
+				struct color c = {
+				    .red = ps->o.shadow_red,
+				    .green = ps->o.shadow_green,
+				    .blue = ps->o.shadow_blue,
+				    .alpha = ps->o.shadow_opacity,
+				};
+				win_bind_shadow(ps->backend_data, w, c, ps->gaussian_map);
 			}
-			auto w = (struct managed_win *)_w;
-			assert(w->state == WSTATE_MAPPED || w->state == WSTATE_UNMAPPED);
-			if (w->state == WSTATE_MAPPED) {
-				// We need to reacquire image
-				log_debug("Marking window %#010x (%s) for update after "
-				          "redirection",
-				          w->base.id, w->name);
-				if (w->shadow) {
-					struct color c = {
-					    .red = ps->o.shadow_red,
-					    .green = ps->o.shadow_green,
-					    .blue = ps->o.shadow_blue,
-					    .alpha = ps->o.shadow_opacity,
-					};
-					win_bind_shadow(ps->backend_data, w, c,
-					                ps->gaussian_map);
-				}
 
-				w->flags |= WIN_FLAGS_PIXMAP_STALE;
-				ps->pending_updates = true;
-			}
+			w->flags |= WIN_FLAGS_PIXMAP_STALE;
+			ps->pending_updates = true;
 		}
 	}
 
@@ -785,20 +767,14 @@ void configure_root(session_t *ps, int width, int height) {
 	bool has_root_change = false;
 	if (ps->redirected) {
 		// On root window changes
-		if (ps->o.experimental_backends) {
-			assert(ps->backend_data);
-			has_root_change = ps->backend_data->ops->root_change != NULL;
-		} else {
-			// Old backend can handle root change
-			has_root_change = true;
-		}
+		assert(ps->backend_data);
+		has_root_change = ps->backend_data->ops->root_change != NULL;
 
 		if (!has_root_change) {
 			// deinit/reinit backend and free up resources if the backend
 			// cannot handle root change
 			destroy_backend(ps);
 		}
-		free_paint(ps, &ps->tgt_buffer);
 	}
 
 	ps->root_width = width;
@@ -819,16 +795,8 @@ void configure_root(session_t *ps, int width, int height) {
 			pixman_region32_clear(&ps->damage_ring[i]);
 		}
 		ps->damage = ps->damage_ring + ps->ndamage - 1;
-#ifdef CONFIG_OPENGL
-		// GLX root change callback
-		if (BKEND_GLX == ps->o.backend && !ps->o.experimental_backends) {
-			glx_on_root_change(ps);
-		}
-#endif
 		if (has_root_change) {
-			if (ps->backend_data != NULL) {
-				ps->backend_data->ops->root_change(ps->backend_data, ps);
-			}
+			ps->backend_data->ops->root_change(ps->backend_data, ps);
 			// Old backend's root_change is not a specific function
 		} else {
 			if (!initialize_backend(ps)) {
@@ -848,26 +816,20 @@ void configure_root(session_t *ps, int width, int height) {
 }
 
 void root_damaged(session_t *ps) {
-	if (ps->root_tile_paint.pixmap) {
-		free_root_tile(ps);
-	}
-
 	if (!ps->redirected) {
 		return;
 	}
 
-	if (ps->backend_data) {
-		if (ps->root_image) {
-			ps->backend_data->ops->release_image(ps->backend_data, ps->root_image);
-		}
-		auto pixmap = x_get_root_back_pixmap(ps);
-		if (pixmap != XCB_NONE) {
-			ps->root_image = ps->backend_data->ops->bind_pixmap(
-			    ps->backend_data, pixmap, x_get_visual_info(ps->c, ps->vis), false);
-			ps->backend_data->ops->image_op(
-			    ps->backend_data, IMAGE_OP_RESIZE_TILE, ps->root_image, NULL,
-			    NULL, (int[]){ps->root_width, ps->root_height});
-		}
+	if (ps->root_image) {
+		ps->backend_data->ops->release_image(ps->backend_data, ps->root_image);
+	}
+	auto pixmap = x_get_root_back_pixmap(ps);
+	if (pixmap != XCB_NONE) {
+		ps->root_image = ps->backend_data->ops->bind_pixmap(
+		    ps->backend_data, pixmap, x_get_visual_info(ps->c, ps->vis), false);
+		ps->backend_data->ops->image_op(ps->backend_data, IMAGE_OP_RESIZE_TILE,
+		                                ps->root_image, NULL, NULL,
+		                                (int[]){ps->root_width, ps->root_height});
 	}
 
 	// Mark screen damaged
@@ -1195,12 +1157,8 @@ static bool redirect_start(session_t *ps) {
 		return false;
 	}
 
-	if (ps->o.experimental_backends) {
-		assert(ps->backend_data);
-		ps->ndamage = ps->backend_data->ops->max_buffer_age;
-	} else {
-		ps->ndamage = maximum_buffer_age(ps);
-	}
+	assert(ps->backend_data);
+	ps->ndamage = ps->backend_data->ops->max_buffer_age;
 	ps->damage_ring = ccalloc(ps->ndamage, region_t);
 	ps->damage = ps->damage_ring + ps->ndamage - 1;
 
@@ -1437,11 +1395,7 @@ static void _draw_callback(EV_P_ session_t *ps, int revents attr_unused) {
 	// If the screen is unredirected, free all_damage to stop painting
 	if (ps->redirected && ps->o.stoppaint_force != ON) {
 		static int paint = 0;
-		if (ps->o.experimental_backends) {
-			paint_all_new(ps, bottom, false);
-		} else {
-			paint_all(ps, bottom, false);
-		}
+		paint_all_new(ps, bottom, false);
 
 		ps->first_frame = false;
 		paint++;
@@ -1559,13 +1513,7 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	    // .root_damage = XCB_NONE,
 	    .overlay = XCB_NONE,
 	    .root_tile_fill = false,
-	    .root_tile_paint = PAINT_INIT,
-	    .tgt_picture = XCB_NONE,
-	    .tgt_buffer = PAINT_INIT,
 	    .reg_win = XCB_NONE,
-#ifdef CONFIG_OPENGL
-	    .glx_prog_win = GLX_PROG_MAIN_INIT,
-#endif
 	    .redirected = false,
 	    .alpha_picts = NULL,
 	    .fade_time = 0L,
@@ -1590,10 +1538,6 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	    .refresh_intv = 0UL,
 	    .paint_tm_offset = 0L,
 
-#ifdef CONFIG_VSYNC_DRM
-	    .drm_fd = -1,
-#endif
-
 	    .xfixes_event = 0,
 	    .xfixes_error = 0,
 	    .damage_event = 0,
@@ -1609,11 +1553,6 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	    .randr_exists = 0,
 	    .randr_event = 0,
 	    .randr_error = 0,
-#ifdef CONFIG_OPENGL
-	    .glx_exists = false,
-	    .glx_event = 0,
-	    .glx_error = 0,
-#endif
 	    .xrfilter_convolution_exists = false,
 
 	    .atoms_wintypes = {0},
@@ -1766,11 +1705,6 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 		}
 	}
 
-	if (ps->o.debug_mode && !ps->o.experimental_backends) {
-		log_fatal("Debug mode only works with the experimental backends.");
-		return NULL;
-	}
-
 	ps->atoms = init_atoms(ps->c);
 	ps->atoms_wintypes[WINTYPE_UNKNOWN] = 0;
 #define SET_WM_TYPE_ATOM(x)                                                              \
@@ -1916,12 +1850,6 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 
 	ps->drivers = detect_driver(ps->c, ps->backend_data, ps->root);
 
-	// Initialize filters, must be preceded by OpenGL context creation
-	if (!ps->o.experimental_backends && !init_render(ps)) {
-		log_fatal("Failed to initialize the backend");
-		exit(1);
-	}
-
 	if (ps->o.print_diagnostics) {
 		print_diagnostics(ps, config_file);
 		free(config_file_to_free);
@@ -1929,20 +1857,10 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	}
 	free(config_file_to_free);
 
-	if (bkend_use_glx(ps) && !ps->o.experimental_backends) {
-		auto gl_logger = gl_string_marker_logger_new();
-		if (gl_logger) {
-			log_info("Enabling gl string marker");
-			log_add_target_tls(gl_logger);
-		}
-	}
-
-	if (ps->o.experimental_backends) {
-		if (ps->o.monitor_repaint && !backend_list[ps->o.backend]->fill) {
-			log_warn("--monitor-repaint is not supported by the backend, "
-			         "disabling");
-			ps->o.monitor_repaint = false;
-		}
+	if (ps->o.monitor_repaint && !backend_list[ps->o.backend]->fill) {
+		log_warn("--monitor-repaint is not supported by the backend, "
+		         "disabling");
+		ps->o.monitor_repaint = false;
 	}
 
 	// Initialize software optimization
@@ -1956,20 +1874,6 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 		xcb_randr_select_input(ps->c, ps->root, XCB_RANDR_NOTIFY_MASK_SCREEN_CHANGE);
 
 	cxinerama_upd_scrs(ps);
-
-	{
-		xcb_render_create_picture_value_list_t pa = {
-		    .subwindowmode = IncludeInferiors,
-		};
-
-		ps->root_picture = x_create_picture_with_visual_and_pixmap(
-		    ps->c, ps->vis, ps->root, XCB_RENDER_CP_SUBWINDOW_MODE, &pa);
-		if (ps->overlay != XCB_NONE) {
-			ps->tgt_picture = x_create_picture_with_visual_and_pixmap(
-			    ps->c, ps->vis, ps->overlay, XCB_RENDER_CP_SUBWINDOW_MODE, &pa);
-		} else
-			ps->tgt_picture = ps->root_picture;
-	}
 
 	ev_io_init(&ps->xiow, x_event_callback, ConnectionNumber(ps->dpy), EV_READ);
 	ev_io_start(ps->loop, &ps->xiow);
@@ -2155,18 +2059,6 @@ static void session_destroy(session_t *ps) {
 		ps->ignore_tail = &ps->ignore_head;
 	}
 
-	// Free tgt_{buffer,picture} and root_picture
-	if (ps->tgt_buffer.pict == ps->tgt_picture)
-		ps->tgt_buffer.pict = XCB_NONE;
-
-	if (ps->tgt_picture == ps->root_picture)
-		ps->tgt_picture = XCB_NONE;
-	else
-		free_picture(ps->c, &ps->tgt_picture);
-
-	free_picture(ps->c, &ps->root_picture);
-	free_paint(ps, &ps->tgt_buffer);
-
 	pixman_region32_fini(&ps->screen_reg);
 	free(ps->expose_rects);
 
@@ -2178,14 +2070,6 @@ static void session_destroy(session_t *ps) {
 	free(ps->o.blur_kerns);
 	free(ps->o.glx_fshader_win_str);
 	free_xinerama_info(ps);
-
-#ifdef CONFIG_VSYNC_DRM
-	// Close file opened for DRM VSync
-	if (ps->drm_fd >= 0) {
-		close(ps->drm_fd);
-		ps->drm_fd = -1;
-	}
-#endif
 
 	// Release overlay window
 	if (ps->overlay) {
@@ -2209,19 +2093,8 @@ static void session_destroy(session_t *ps) {
 		ps->debug_window = XCB_NONE;
 	}
 
-	if (ps->o.experimental_backends) {
-		// backend is deinitialized in unredirect()
-		assert(ps->backend_data == NULL);
-	} else {
-		deinit_render(ps);
-	}
-
-#if CONFIG_OPENGL
-	if (glx_has_context(ps)) {
-		// GLX context created, but not for rendering
-		glx_destroy(ps);
-	}
-#endif
+	// backend is deinitialized in unredirect()
+	assert(ps->backend_data == NULL);
 
 	// Flush all events
 	x_sync(ps->c);

@@ -7,7 +7,7 @@ fi
 echo "Running test $2"
 
 # TODO keep the log file, and parse it to see if test is successful
-($1 --experimental-backends --backend dummy --log-level=debug --log-file=$PWD/log --config=$2) &
+($1 --backend dummy --log-level=debug --log-file=$PWD/log --config=$2) &
 compton_pid=$!
 $3
 

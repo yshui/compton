@@ -19,7 +19,6 @@
 #include "config.h"
 #include "log.h"        // XXX clean up
 #include "region.h"
-#include "render.h"
 #include "types.h"
 #include "utils.h"
 #include "win.h"
@@ -96,14 +95,6 @@ static inline void free_wincondlst(c2_lptr_t **pcondlst) {
 	while ((*pcondlst = c2_free_lptr(*pcondlst)))
 		continue;
 }
-
-#ifndef CONFIG_OPENGL
-static inline void free_paint_glx(session_t *ps attr_unused, paint_t *p attr_unused) {
-}
-static inline void
-free_win_res_glx(session_t *ps attr_unused, struct managed_win *w attr_unused) {
-}
-#endif
 
 /**
  * Create a XTextProperty of a single string.

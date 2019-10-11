@@ -76,9 +76,6 @@ OPTIONS
 *--log-file*::
 	Set the log file. If *--log-file* is never specified, logs will be written to stderr. Otherwise, logs will to written to the given file, though some of the early logs might still be written to the stderr. When setting this option from the config file, it is recommended to use an absolute path.
 
-*--experimental-backends*::
-	Use the new, reimplemented version of the backends. The new backends are HIGHLY UNSTABLE at this point, you have been warned. This option is not available in the config file.
-
 *--show-all-xerrors*::
 	Show all X errors (for debugging).
 
@@ -395,7 +392,6 @@ Available options of the 'blur' section are: ::
   *method*:::
     A string. Controls the blur method. Corresponds to the `--blur-method` command line option. Available choices are:
       'none' to disable blurring; 'gaussian' for gaussian blur; 'box' for box blur; 'kernel' for convolution blur with a custom kernel.
-    Note: 'gaussian' and 'box' blur methods are only supported by the experimental backends.
 
   *size*:::
     An integer. The size of the blur kernel, required by 'gaussian' and 'box' blur methods. For the 'kernel' method, the size is included in the kernel. Corresponds to the `--blur-size` command line option.

@@ -11,20 +11,6 @@ We also try to fix bugs.
 
 The original README can be found [here](README_orig.md)
 
-## Call for testers
-
-### `--experimental-backends`
-
-This flag enables the refactored/partially rewritten backends.
-
-Currently new backends features better vsync with the xrender backend, improved input lag with the glx backend (for non-NVIDIA users). The performance should be on par with the old backends.
-
-New backend features will only be implemented on the new backends from now on, and the old backends will eventually be phased out after the new backends stabilizes.
-
-To test the new backends, add the `--experimental-backends` flag to the command line you used to run compton. This flag is not available from the configuration file.
-
-To report issues with the new backends, please state explicitly you are using the new backends in your report.
-
 ## Change Log
 
 See [Releases](https://github.com/yshui/compton/releases)

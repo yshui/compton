@@ -7,8 +7,8 @@ base_deps = [
 	libev
 ]
 
-srcs = [ files('compton.c', 'win.c', 'c2.c', 'x.c', 'config.c', 'vsync.c', 'utils.c',
-               'diagnostic.c', 'string_utils.c', 'render.c', 'kernel.c', 'log.c',
+srcs = [ files('compton.c', 'win.c', 'c2.c', 'x.c', 'config.c', 'utils.c',
+               'diagnostic.c', 'string_utils.c', 'kernel.c', 'log.c',
                'options.c', 'event.c', 'cache.c', 'atom.c') ]
 compton_inc = include_directories('.')
 
@@ -50,17 +50,6 @@ if get_option('regex')
 		cflags += ['-DCONFIG_REGEX_PCRE_JIT']
 	endif
 	deps += [pcre]
-endif
-
-if get_option('vsync_drm')
-	cflags += ['-DCONFIG_VSYNC_DRM']
-	deps += [dependency('libdrm', required: true)]
-endif
-
-if get_option('opengl')
-	cflags += ['-DCONFIG_OPENGL', '-DGL_GLEXT_PROTOTYPES']
-	deps += [dependency('gl', required: true)]
-	srcs += [ 'opengl.c' ]
 endif
 
 if get_option('dbus')

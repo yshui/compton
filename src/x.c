@@ -356,21 +356,6 @@ void x_print_error(unsigned long serial, uint8_t major, uint16_t minor, uint8_t 
 		CASESTRRET2(XCB_RENDER_GLYPH);
 	}
 
-#ifdef CONFIG_OPENGL
-	if (ps->glx_exists) {
-		o = error_code - ps->glx_error;
-		switch (o) {
-			CASESTRRET2(GLX_BAD_SCREEN);
-			CASESTRRET2(GLX_BAD_ATTRIBUTE);
-			CASESTRRET2(GLX_NO_EXTENSION);
-			CASESTRRET2(GLX_BAD_VISUAL);
-			CASESTRRET2(GLX_BAD_CONTEXT);
-			CASESTRRET2(GLX_BAD_VALUE);
-			CASESTRRET2(GLX_BAD_ENUM);
-		}
-	}
-#endif
-
 	if (ps->xsync_exists) {
 		o = error_code - ps->xsync_error;
 		switch (o) {

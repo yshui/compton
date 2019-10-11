@@ -41,9 +41,6 @@
 #include <xcb/sync.h>
 
 #include "uthash_extra.h"
-#ifdef CONFIG_OPENGL
-#include "backend/gl/glx.h"
-#endif
 
 // X resource checker
 #ifdef DEBUG_XRC
@@ -59,7 +56,6 @@
 #include "types.h"
 #include "utils.h"
 #include "list.h"
-#include "render.h"
 #include "win_defs.h"
 #include "x.h"
 
@@ -87,37 +83,6 @@ typedef struct _ignore {
 	struct _ignore *next;
 	unsigned long sequence;
 } ignore_t;
-
-#ifdef CONFIG_OPENGL
-#ifdef DEBUG_GLX_DEBUG_CONTEXT
-typedef GLXContext (*f_glXCreateContextAttribsARB)(Display *dpy, GLXFBConfig config,
-                                                   GLXContext share_context, Bool direct,
-                                                   const int *attrib_list);
-typedef void (*GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity,
-                            GLsizei length, const GLchar *message, GLvoid *userParam);
-typedef void (*f_DebugMessageCallback)(GLDEBUGPROC, void *userParam);
-#endif
-
-typedef struct glx_prog_main {
-	/// GLSL program.
-	GLuint prog;
-	/// Location of uniform "opacity" in window GLSL program.
-	GLint unifm_opacity;
-	/// Location of uniform "invert_color" in blur GLSL program.
-	GLint unifm_invert_color;
-	/// Location of uniform "tex" in window GLSL program.
-	GLint unifm_tex;
-} glx_prog_main_t;
-
-#define GLX_PROG_MAIN_INIT                                                               \
-	{ .prog = 0, .unifm_opacity = -1, .unifm_invert_color = -1, .unifm_tex = -1, }
-
-#else
-struct glx_prog_main {};
-#endif
-
-#define PAINT_INIT                                                                       \
-	{ .pixmap = XCB_NONE, .pict = XCB_NONE }
 
 /// Linked list type of atoms.
 typedef struct _latom {
@@ -186,28 +151,12 @@ typedef struct session {
 	xcb_window_t debug_window;
 	/// Whether the root tile is filled by compton.
 	bool root_tile_fill;
-	/// Picture of the root window background.
-	paint_t root_tile_paint;
 	/// The backend data the root pixmap bound to
 	void *root_image;
 	/// A region of the size of the screen.
 	region_t screen_reg;
-	/// Picture of root window. Destination of painting in no-DBE painting
-	/// mode.
-	xcb_render_picture_t root_picture;
-	/// A Picture acting as the painting target.
-	xcb_render_picture_t tgt_picture;
-	/// Temporary buffer to paint to before sending to display.
-	paint_t tgt_buffer;
 	/// Window ID of the window we register as a symbol.
 	xcb_window_t reg_win;
-#ifdef CONFIG_OPENGL
-	/// Pointer to GLX data.
-	struct glx_session *psglx;
-	/// Custom GLX program used for painting window.
-	// XXX should be in struct glx_session
-	glx_prog_main_t glx_prog_win;
-#endif
 	/// Sync fence to sync draw operations
 	xcb_sync_fence_t sync_fence;
 	/// Whether we are rendering the first frame after screen is redirected
@@ -293,12 +242,6 @@ typedef struct session {
 	/// Nanosecond offset of the first painting.
 	long paint_tm_offset;
 
-#ifdef CONFIG_VSYNC_DRM
-	// === DRM VSync related ===
-	/// File descriptor of DRI device file. Used for DRM VSync.
-	int drm_fd;
-#endif
-
 	// === X extension related ===
 	/// Event base number for X Fixes extension.
 	int xfixes_event;
@@ -332,14 +275,6 @@ typedef struct session {
 	int randr_error;
 	/// Whether X Present extension exists.
 	bool present_exists;
-#ifdef CONFIG_OPENGL
-	/// Whether X GLX extension exists.
-	bool glx_exists;
-	/// Event base number for X GLX extension.
-	int glx_event;
-	/// Error base number for X GLX extension.
-	int glx_error;
-#endif
 	/// Whether X Xinerama extension exists.
 	bool xinerama_exists;
 	/// Xinerama screen regions.
@@ -366,8 +301,6 @@ typedef struct session {
 	// === DBus related ===
 	void *dbus_data;
 #endif
-
-	int (*vsync_wait)(session_t *);
 } session_t;
 
 /// Enumeration for window event hints.

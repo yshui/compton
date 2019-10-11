@@ -9,16 +9,11 @@
 
 #include "uthash_extra.h"
 
-// FIXME shouldn't need this
-#ifdef CONFIG_OPENGL
-#include <GL/gl.h>
-#endif
-
+#include "backend/backend.h"
 #include "c2.h"
 #include "compiler.h"
 #include "list.h"
 #include "region.h"
-#include "render.h"
 #include "types.h"
 #include "utils.h"
 #include "win_defs.h"
@@ -34,21 +29,6 @@ typedef struct _glx_texture glx_texture_t;
 #define win_stack_foreach_managed_safe(w, win_stack)                                     \
 	list_foreach_safe(struct managed_win, w, win_stack,                              \
 	                  base.stack_neighbour) if (w->base.managed)
-
-#ifdef CONFIG_OPENGL
-// FIXME this type should be in opengl.h
-//       it is very unideal for it to be here
-typedef struct {
-	/// Framebuffer used for blurring.
-	GLuint fbo;
-	/// Textures used for blurring.
-	GLuint textures[2];
-	/// Width of the textures.
-	int width;
-	/// Height of the textures.
-	int height;
-} glx_blur_cache_t;
-#endif
 
 /// An entry in the window stack. May or may not correspond to a window we know about.
 struct window_stack_entry {
@@ -122,8 +102,6 @@ struct managed_win {
 	bool pixmap_damaged;
 	/// Damage of the window.
 	xcb_damage_damage_t damage;
-	/// Paint info of the window.
-	paint_t paint;
 
 	/// Bounding shape of the window. In local coordinates.
 	/// See above about coordinate systems.
@@ -225,8 +203,6 @@ struct managed_win {
 	int shadow_width;
 	/// Height of shadow. Affected by window size and commandline argument.
 	int shadow_height;
-	/// Picture to render shadow. Affected by window size.
-	paint_t shadow_paint;
 	/// The value of _COMPTON_SHADOW attribute of the window. Below 0 for
 	/// none.
 	long prop_shadow;
@@ -243,11 +219,6 @@ struct managed_win {
 
 	/// Whether to blur window background.
 	bool blur_background;
-
-#ifdef CONFIG_OPENGL
-	/// Textures and FBO background blur use.
-	glx_blur_cache_t glx_blur_cache;
-#endif
 };
 
 /// Process pending updates on a window. Has to be called in X critical section
