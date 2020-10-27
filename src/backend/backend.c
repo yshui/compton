@@ -328,6 +328,11 @@ void paint_all_new(session_t *ps, struct managed_win *t, bool ignore_damage) {
 
 		// Draw window on target
 		if (!w->invert_color && !w->dim && w->frame_opacity == 1 && w->opacity == 1) {
+			if (w->fg_shader) {
+				ps->backend_data->ops->image_op(
+				    ps->backend_data, IMAGE_OP_SET_SHADER, w->win_image,
+				    NULL, NULL, (void *)w->fg_shader);
+			}
 			ps->backend_data->ops->compose(ps->backend_data, w->win_image,
 			                               w->g.x, w->g.y,
 			                               &reg_paint_in_bound, &reg_visible);
@@ -387,6 +392,11 @@ void paint_all_new(session_t *ps, struct managed_win *t, bool ignore_damage) {
 				ps->backend_data->ops->image_op(
 				    ps->backend_data, IMAGE_OP_APPLY_ALPHA_ALL, new_img,
 				    NULL, &reg_visible_local, (double[]){w->opacity});
+			}
+			if (w->fg_shader) {
+				ps->backend_data->ops->image_op(
+				    ps->backend_data, IMAGE_OP_SET_SHADER, new_img, NULL,
+				    NULL, (void *)w->fg_shader);
 			}
 			ps->backend_data->ops->compose(ps->backend_data, new_img, w->g.x,
 			                               w->g.y, &reg_paint_in_bound,

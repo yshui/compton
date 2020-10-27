@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <xcb/render.h>        // for xcb_render_fixed_t, XXX
 
 #include "backend/backend.h"
@@ -150,38 +151,42 @@ end:
 }
 
 /**
+ * @brief Create a program from NULL-terminated arrays of vertex and fragment shader
+ * strings.
+ */
+GLuint gl_create_program_from_strv(const char **vert_shaders, const char **frag_shaders) {
+	int vert_count, frag_count;
+	for (vert_count = 0; vert_shaders && vert_shaders[vert_count]; ++vert_count)
+		;
+	for (frag_count = 0; frag_shaders && frag_shaders[frag_count]; ++frag_count)
+		;
+	auto shaders = (GLuint *)ccalloc(vert_count + frag_count, GLuint);
+
+	for (int i = 0; i < vert_count; ++i) {
+		shaders[i] = gl_create_shader(GL_VERTEX_SHADER, vert_shaders[i]);
+	}
+	for (int i = 0; i < frag_count; ++i) {
+		shaders[vert_count + i] =
+		    gl_create_shader(GL_FRAGMENT_SHADER, frag_shaders[i]);
+	}
+	GLuint prog = gl_create_program(shaders, vert_count + frag_count);
+
+	for (int i = 0; i < vert_count + frag_count; ++i) {
+		glDeleteShader(shaders[i]);
+	}
+	free(shaders);
+
+	return prog;
+}
+
+/**
  * @brief Create a program from vertex and fragment shader strings.
  */
 GLuint gl_create_program_from_str(const char *vert_shader_str, const char *frag_shader_str) {
-	GLuint vert_shader = 0;
-	GLuint frag_shader = 0;
-	GLuint prog = 0;
+	const char *vert_shaders[2] = {vert_shader_str, NULL};
+	const char *frag_shaders[2] = {frag_shader_str, NULL};
 
-	if (vert_shader_str)
-		vert_shader = gl_create_shader(GL_VERTEX_SHADER, vert_shader_str);
-	if (frag_shader_str)
-		frag_shader = gl_create_shader(GL_FRAGMENT_SHADER, frag_shader_str);
-
-	{
-		GLuint shaders[2];
-		int count = 0;
-		if (vert_shader) {
-			shaders[count++] = vert_shader;
-		}
-		if (frag_shader) {
-			shaders[count++] = frag_shader;
-		}
-		if (count) {
-			prog = gl_create_program(shaders, count);
-		}
-	}
-
-	if (vert_shader)
-		glDeleteShader(vert_shader);
-	if (frag_shader)
-		glDeleteShader(frag_shader);
-
-	return prog;
+	return gl_create_program_from_strv(vert_shaders, frag_shaders);
 }
 
 static void gl_free_prog_main(gl_win_shader_t *pprogram) {
@@ -378,25 +383,38 @@ static void _gl_compose(backend_t *base, struct gl_image *img, GLuint target,
 		brightness = gl_average_texture_color(base, img);
 	}
 
-	assert(gd->win_shader.prog);
-	glUseProgram(gd->win_shader.prog);
-	if (gd->win_shader.unifm_opacity >= 0) {
-		glUniform1f(gd->win_shader.unifm_opacity, (float)img->opacity);
+	gl_win_shader_t *win_shader = img->shader;
+	if (!win_shader) {
+		uint32_t default_id = CUSTOM_SHADER_DEFAULT;
+		HASH_FIND_INT(gd->win_shaders, &default_id, win_shader);
 	}
-	if (gd->win_shader.unifm_invert_color >= 0) {
-		glUniform1i(gd->win_shader.unifm_invert_color, img->color_inverted);
+
+	assert(win_shader);
+	assert(win_shader->prog);
+	glUseProgram(win_shader->prog);
+	if (win_shader->unifm_opacity >= 0) {
+		glUniform1f(win_shader->unifm_opacity, (float)img->opacity);
 	}
-	if (gd->win_shader.unifm_tex >= 0) {
-		glUniform1i(gd->win_shader.unifm_tex, 0);
+	if (win_shader->unifm_invert_color >= 0) {
+		glUniform1i(win_shader->unifm_invert_color, img->color_inverted);
 	}
-	if (gd->win_shader.unifm_dim >= 0) {
-		glUniform1f(gd->win_shader.unifm_dim, (float)img->dim);
+	if (win_shader->unifm_tex >= 0) {
+		glUniform1i(win_shader->unifm_tex, 0);
 	}
-	if (gd->win_shader.unifm_brightness >= 0) {
-		glUniform1i(gd->win_shader.unifm_brightness, 1);
+	if (win_shader->unifm_dim >= 0) {
+		glUniform1f(win_shader->unifm_dim, (float)img->dim);
 	}
-	if (gd->win_shader.unifm_max_brightness >= 0) {
-		glUniform1f(gd->win_shader.unifm_max_brightness, (float)img->max_brightness);
+	if (win_shader->unifm_brightness >= 0) {
+		glUniform1i(win_shader->unifm_brightness, 1);
+	}
+	if (win_shader->unifm_max_brightness >= 0) {
+		glUniform1f(win_shader->unifm_max_brightness, (float)img->max_brightness);
+	}
+	if (win_shader->unifm_time >= 0) {
+		struct timespec ts;
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		glUniform1f(win_shader->unifm_time,
+		            (float)ts.tv_sec * 1000.0f + (float)ts.tv_nsec / 1.0e6f);
 	}
 
 	// log_trace("Draw: %d, %d, %d, %d -> %d, %d (%d, %d) z %d\n",
@@ -908,13 +926,13 @@ const char *vertex_shader = GLSL(330,
 /**
  * Load a GLSL main program from shader strings.
  */
-static int gl_win_shader_from_string(const char *vshader_str, const char *fshader_str,
-                                     gl_win_shader_t *ret) {
+static bool gl_win_shader_from_stringv(const char **vshader_strv,
+                                       const char **fshader_strv, gl_win_shader_t *ret) {
 	// Build program
-	ret->prog = gl_create_program_from_str(vshader_str, fshader_str);
+	ret->prog = gl_create_program_from_strv(vshader_strv, fshader_strv);
 	if (!ret->prog) {
 		log_error("Failed to create GLSL program.");
-		return -1;
+		return false;
 	}
 
 	// Get uniform addresses
@@ -925,6 +943,7 @@ static int gl_win_shader_from_string(const char *vshader_str, const char *fshade
 	ret->unifm_brightness = glGetUniformLocationChecked(ret->prog, "brightness");
 	ret->unifm_max_brightness =
 	    glGetUniformLocationChecked(ret->prog, "max_brightness");
+	ret->unifm_time = glGetUniformLocationChecked(ret->prog, "time");
 
 	glUseProgram(ret->prog);
 	int orig_loc = glGetUniformLocation(ret->prog, "orig");
@@ -1579,8 +1598,10 @@ const char *win_shader_glsl = GLSL(330,
 	uniform sampler2D brightness;
 	uniform float max_brightness;
 
+	vec4 window_shader();
+
 	void main() {
-		vec4 c = texelFetch(tex, ivec2(texcoord), 0);
+		vec4 c = window_shader();
 		if (invert_color) {
 			c = vec4(c.aaa - c.rgb, c.a);
 		}
@@ -1598,6 +1619,15 @@ const char *win_shader_glsl = GLSL(330,
 	}
 );
 
+const char *win_shader_default = GLSL(330,
+	in vec2 texcoord;
+	uniform sampler2D tex;
+
+	vec4 window_shader() {
+		return texelFetch(tex, ivec2(texcoord), 0);
+	}
+);
+
 const char *present_vertex_shader = GLSL(330,
 	uniform mat4 projection;
 	layout(location = 0) in vec2 coord;
@@ -1608,6 +1638,82 @@ const char *present_vertex_shader = GLSL(330,
 	}
 );
 // clang-format on
+
+static gl_win_shader_t *
+create_win_shader(const struct custom_shader *shader, const GLfloat *projection) {
+	auto win_shader = (gl_win_shader_t *)ccalloc(1, gl_win_shader_t);
+	win_shader->id = shader->id;
+
+	const char *vert_shaders[2] = {vertex_shader, NULL};
+	const char *frag_shaders[3] = {win_shader_glsl, win_shader_default, NULL};
+	// TODO(tryone144): Potentially add support for loading more shader files?
+	if (shader->source) {
+		frag_shaders[1] = shader->source;
+	}
+
+	if (!gl_win_shader_from_stringv(vert_shaders, frag_shaders, win_shader)) {
+		free(win_shader);
+		return NULL;
+	}
+
+	int pml = glGetUniformLocationChecked(win_shader->prog, "projection");
+	glUseProgram(win_shader->prog);
+	glUniformMatrix4fv(pml, 1, false, projection);
+	glUseProgram(0);
+
+	return win_shader;
+}
+
+bool gl_init_win_shaders(struct gl_data *gd, session_t *ps, const GLfloat *projection) {
+	bool success = false;
+	gd->win_shaders = NULL;
+
+	struct custom_shader *c_shader, *c_tmp;
+	HASH_ITER(hh, ps->o.custom_shaders, c_shader, c_tmp) {
+		gl_win_shader_t *win_shader = NULL;
+		HASH_FIND_INT(gd->win_shaders, &c_shader->id, win_shader);
+		if (win_shader) {
+			continue;
+		}
+
+		win_shader = create_win_shader(c_shader, projection);
+		if (!win_shader) {
+			log_error("Failed to create custom window shader [%u] \"%s\"",
+			          c_shader->id, c_shader->path);
+			goto end;
+		}
+
+		HASH_ADD_INT(gd->win_shaders, id, win_shader);
+	}
+
+	// Generate default/fallback window shader program
+	gl_win_shader_t *default_shader = NULL;
+	uint32_t default_id = CUSTOM_SHADER_DEFAULT;
+	HASH_FIND_INT(gd->win_shaders, &default_id, default_shader);
+
+	if (!default_shader) {
+		default_shader = create_win_shader(&custom_shader_default, projection);
+		if (!default_shader) {
+			log_error("Failed to create default/fallback window shader");
+			goto end;
+		}
+
+		HASH_ADD_INT(gd->win_shaders, id, default_shader);
+	}
+
+	success = true;
+
+end:
+	if (!success) {
+		gl_win_shader_t *shader, *tmp;
+		HASH_ITER(hh, gd->win_shaders, shader, tmp) {
+			gl_free_prog_main(shader);
+			free(shader);
+		}
+	}
+
+	return success;
+}
 
 bool gl_init(struct gl_data *gd, session_t *ps) {
 	// Initialize GLX data structure
@@ -1659,15 +1765,14 @@ bool gl_init(struct gl_data *gd, session_t *ps) {
 	                                   {-1, -1, 0, 1}};
 
 	// Initialize shaders
-	gl_win_shader_from_string(vertex_shader, win_shader_glsl, &gd->win_shader);
-	int pml = glGetUniformLocationChecked(gd->win_shader.prog, "projection");
-	glUseProgram(gd->win_shader.prog);
-	glUniformMatrix4fv(pml, 1, false, projection_matrix[0]);
-	glUseProgram(0);
+	if (!gl_init_win_shaders(gd, ps, projection_matrix[0])) {
+		log_error("Failed to create window shaders");
+		return false;
+	}
 
 	gd->fill_shader.prog = gl_create_program_from_str(fill_vert, fill_frag);
 	gd->fill_shader.color_loc = glGetUniformLocation(gd->fill_shader.prog, "color");
-	pml = glGetUniformLocationChecked(gd->fill_shader.prog, "projection");
+	int pml = glGetUniformLocationChecked(gd->fill_shader.prog, "projection");
 	glUseProgram(gd->fill_shader.prog);
 	glUniformMatrix4fv(pml, 1, false, projection_matrix[0]);
 	glUseProgram(0);
@@ -1722,7 +1827,12 @@ bool gl_init(struct gl_data *gd, session_t *ps) {
 }
 
 void gl_deinit(struct gl_data *gd) {
-	gl_free_prog_main(&gd->win_shader);
+	gl_win_shader_t *shader, *tmp;
+	HASH_ITER(hh, gd->win_shaders, shader, tmp) {
+		HASH_DEL(gd->win_shaders, shader);
+		gl_free_prog_main(shader);
+		free(shader);
+	}
 
 	if (gd->logger) {
 		log_remove_target_tls(gd->logger);
@@ -1884,6 +1994,7 @@ void gl_present(backend_t *base, const region_t *region) {
 /// stub for backend_operations::image_op
 bool gl_image_op(backend_t *base, enum image_operations op, void *image_data,
                  const region_t *reg_op, const region_t *reg_visible attr_unused, void *arg) {
+	auto gd = (struct gl_data *)base;
 	struct gl_image *tex = image_data;
 	int *iargs = arg;
 	switch (op) {
@@ -1903,6 +2014,15 @@ bool gl_image_op(backend_t *base, enum image_operations op, void *image_data,
 		tex->eheight = iargs[1];
 		break;
 	case IMAGE_OP_MAX_BRIGHTNESS: tex->max_brightness = *(double *)arg; break;
+	case IMAGE_OP_SET_SHADER: {
+		// TODO(tryone144): Gracefully handle NULL as *arg;
+		assert(arg);
+		auto shader = (struct custom_shader *)arg;
+		gl_win_shader_t *win_shader;
+		HASH_FIND_INT(gd->win_shaders, &shader->id, win_shader);
+		assert(win_shader);
+		tex->shader = win_shader;
+	} break;
 	}
 
 	return true;

@@ -9,7 +9,6 @@
 #define mstrncmp(s1, s2) strncmp((s1), (s2), strlen(s1))
 
 char *mstrjoin(const char *src1, const char *src2);
-char *mstrjoin3(const char *src1, const char *src2, const char *src3);
 void mstrextend(char **psrc1, const char *src2);
 
 /// Parse a floating point number of form (+|-)?[0-9]*(\.[0-9]*)

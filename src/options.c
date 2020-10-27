@@ -440,6 +440,8 @@ static const struct option longopts[] = {
     {"blur-deviation", required_argument, NULL, 330},
     {"blur-strength", required_argument, NULL, 331},
     {"shadow-color", required_argument, NULL, 332},
+    {"window-shader-fg", required_argument, NULL, 333},
+    {"window-shader-fg-rule", required_argument, NULL, 334},
     {"experimental-backends", no_argument, NULL, 733},
     {"monitor-repaint", no_argument, NULL, 800},
     {"diagnostics", no_argument, NULL, 801},
@@ -815,6 +817,26 @@ bool get_cfg(options_t *opt, int argc, char *const *argv, bool shadow_enable,
 		case 317:
 			opt->glx_fshader_win_str = strdup(optarg);
 			break;
+		case 333: {
+			char *cwd = get_current_dir_name();
+			opt->window_shader_fg =
+			    parse_custom_shader(optarg, &opt->custom_shaders, cwd);
+			free(cwd);
+			if (!opt->window_shader_fg) {
+				exit(1);
+			}
+			break;
+		}
+		case 334: {
+			// --window-shader-fg-rule
+			char *cwd = get_current_dir_name();
+			if (!parse_rule_window_shader(&opt->window_shader_fg_rules,
+			                              &opt->custom_shaders, optarg, cwd)) {
+				exit(1);
+			}
+			free(cwd);
+			break;
+		}
 		case 321: {
 			enum log_level tmp_level = string_to_log_level(optarg);
 			if (tmp_level == LOG_LEVEL_INVALID) {
@@ -826,13 +848,8 @@ bool get_cfg(options_t *opt, int argc, char *const *argv, bool shadow_enable,
 		}
 		P_CASEBOOL(319, no_x_selection);
 		P_CASEBOOL(323, use_damage);
-		case 324:
-			opt->use_damage = false;
-			break;
-		case 325:
-			opt->vsync = false;
-			break;
-
+		case 324: opt->use_damage = false; break;
+		case 325: opt->vsync = false; break;
 		case 326:
 			opt->max_brightness = atof(optarg);
 			break;
@@ -862,7 +879,9 @@ bool get_cfg(options_t *opt, int argc, char *const *argv, bool shadow_enable,
 
 		P_CASEBOOL(733, experimental_backends);
 		P_CASEBOOL(800, monitor_repaint);
-		case 801: opt->print_diagnostics = true; break;
+		case 801:
+			opt->print_diagnostics = true;
+			break;
 		P_CASEBOOL(802, debug_mode);
 		P_CASEBOOL(803, no_ewmh_fullscreen);
 		default: usage(argv[0], 1); break;
@@ -905,6 +924,31 @@ bool get_cfg(options_t *opt, int argc, char *const *argv, bool shadow_enable,
 		log_error("Transparent clipping only works with the experimental "
 		          "backends");
 		return false;
+	}
+
+	if (opt->glx_fshader_win_str && opt->experimental_backends) {
+		log_warn("--glx-fshader-win has been replaced by "
+		         "\"--window-shader-fg\" for the experimental backends.");
+	}
+	if (opt->custom_shaders) {
+		if (!opt->window_shader_fg) {
+			opt->window_shader_fg = &custom_shader_default;
+		}
+
+		if (!opt->experimental_backends || opt->backend != BKEND_GLX) {
+			log_warn("The new window shader interface only works with the "
+			         "experimental glx backend.%s",
+			         (opt->backend == BKEND_GLX) ? " You may want to use "
+			                                       "\"--glx-fshader-win\" "
+			                                       "instead on the legacy "
+			                                       "glx backend."
+			                                     : "");
+			opt->window_shader_fg = NULL;
+			while ((opt->window_shader_fg_rules =
+			            c2_free_lptr(opt->window_shader_fg_rules))) {
+				continue;
+			}
+		}
 	}
 
 	// Range checking and option assignments

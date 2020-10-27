@@ -465,6 +465,7 @@ static bool image_op(backend_t *base, enum image_operations op, void *image,
 		break;
 	case IMAGE_OP_APPLY_ALPHA_ALL: assert(false);
 	case IMAGE_OP_MAX_BRIGHTNESS: assert(false);
+	case IMAGE_OP_SET_SHADER: assert(false);
 	}
 	pixman_region32_fini(&reg);
 	return true;

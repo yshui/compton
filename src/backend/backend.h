@@ -49,6 +49,8 @@ enum image_operations {
 	IMAGE_OP_RESIZE_TILE,
 	// Limit how bright image can be
 	IMAGE_OP_MAX_BRIGHTNESS,
+	// Set the shader program to use
+	IMAGE_OP_SET_SHADER,
 };
 
 struct gaussian_blur_args {

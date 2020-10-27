@@ -254,6 +254,9 @@ struct managed_win {
 	/// Whether to blur window background.
 	bool blur_background;
 
+	/// The custom window shader to use when rendering.
+	const struct custom_shader *fg_shader;
+
 #ifdef CONFIG_OPENGL
 	/// Textures and FBO background blur use.
 	glx_blur_cache_t glx_blur_cache;

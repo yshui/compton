@@ -15,6 +15,8 @@
 
 // Program and uniforms for window shader
 typedef struct {
+	UT_hash_handle hh;
+	uint32_t id;
 	GLuint prog;
 	GLint unifm_opacity;
 	GLint unifm_invert_color;
@@ -22,6 +24,7 @@ typedef struct {
 	GLint unifm_dim;
 	GLint unifm_brightness;
 	GLint unifm_max_brightness;
+	GLint unifm_time;
 } gl_win_shader_t;
 
 // Program and uniforms for brightness shader
@@ -58,6 +61,7 @@ struct gl_texture {
 /// @brief Wrapper of a binded GLX texture.
 typedef struct gl_image {
 	struct gl_texture *inner;
+	gl_win_shader_t *shader;
 	double opacity;
 	double dim;
 	double max_brightness;
@@ -72,7 +76,8 @@ struct gl_data {
 	bool is_nvidia;
 	// Height and width of the root window
 	int height, width;
-	gl_win_shader_t win_shader;
+	// Hash-table of window shaders
+	gl_win_shader_t *win_shaders;
 	gl_brightness_shader_t brightness_shader;
 	gl_fill_shader_t fill_shader;
 	GLuint back_texture, back_fbo;
@@ -100,8 +105,8 @@ GLuint gl_create_program_from_str(const char *vert_shader_str, const char *frag_
 /**
  * @brief Render a region with texture data.
  */
-void gl_compose(backend_t *, void *ptex, int dst_x, int dst_y, const region_t *reg_tgt,
-                const region_t *reg_visible);
+void gl_compose(backend_t *, void *image_data, int dst_x, int dst_y,
+                const region_t *reg_tgt, const region_t *reg_visible);
 
 void gl_resize(struct gl_data *, int width, int height);
 

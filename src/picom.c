@@ -1845,6 +1845,20 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 		return NULL;
 	}
 
+	// TODO(tryone144): Remove debug calls
+	if (ps->o.custom_shaders) {
+		log_info("Custom shader table entries: %d", HASH_COUNT(ps->o.custom_shaders));
+		struct custom_shader *shader, *tmp;
+		HASH_ITER(hh, ps->o.custom_shaders, shader, tmp) {
+			log_info("Custom shader [%d]: \"%s\" ||\n%s", shader->id,
+			         shader->path, shader->source);
+		}
+	}
+	if (ps->o.window_shader_fg) {
+		log_info("Default window shader: [%d] \"%s\"", ps->o.window_shader_fg->id,
+		         ps->o.window_shader_fg->path);
+	}
+
 	if (ps->o.logpath) {
 		auto l = file_logger_new(ps->o.logpath);
 		if (l) {
@@ -1893,6 +1907,7 @@ static session_t *session_init(int argc, char **argv, Display *dpy,
 	      c2_list_postprocess(ps, ps->o.fade_blacklist) &&
 	      c2_list_postprocess(ps, ps->o.blur_background_blacklist) &&
 	      c2_list_postprocess(ps, ps->o.invert_color_list) &&
+	      c2_list_postprocess(ps, ps->o.window_shader_fg_rules) &&
 	      c2_list_postprocess(ps, ps->o.opacity_rules) &&
 	      c2_list_postprocess(ps, ps->o.focus_blacklist))) {
 		log_error("Post-processing of conditionals failed, some of your rules "
@@ -2263,6 +2278,7 @@ static void session_destroy(session_t *ps) {
 	free_wincondlst(&ps->o.focus_blacklist);
 	free_wincondlst(&ps->o.invert_color_list);
 	free_wincondlst(&ps->o.blur_background_blacklist);
+	free_wincondlst(&ps->o.window_shader_fg_rules);
 	free_wincondlst(&ps->o.opacity_rules);
 	free_wincondlst(&ps->o.paint_blacklist);
 	free_wincondlst(&ps->o.unredir_if_possible_blacklist);
@@ -2315,6 +2331,18 @@ static void session_destroy(session_t *ps) {
 	free(ps->o.blur_kerns);
 	free(ps->o.glx_fshader_win_str);
 	free_xinerama_info(ps);
+
+	// Release custom window shaders
+	struct custom_shader *shader, *tmp;
+	HASH_ITER(hh, ps->o.custom_shaders, shader, tmp) {
+		HASH_DEL(ps->o.custom_shaders, shader);
+		free(shader->path);
+		free(shader->source);
+		free(shader);
+	}
+	// TODO(tryone144): Explicitly set to NULL for debugging
+	ps->o.custom_shaders = NULL;
+	ps->o.window_shader_fg = NULL;
 
 #ifdef CONFIG_VSYNC_DRM
 	// Close file opened for DRM VSync

@@ -985,6 +985,18 @@ win_set_blur_background(session_t *ps, struct managed_win *w, bool blur_backgrou
 	add_damage_from_win(ps, w);
 }
 
+static void win_set_fg_shader(session_t *ps, struct managed_win *w,
+                              const struct custom_shader *shader_new) {
+	if (w->fg_shader == shader_new)
+		return;
+
+	w->fg_shader = shader_new;
+
+	// A different shader might change how the window is drawn, these changes should
+	// be rare however, so this should be fine.
+	add_damage_from_win(ps, w);
+}
+
 /**
  * Determine if a window should have background blurred.
  */
@@ -1005,6 +1017,22 @@ static void win_determine_blur_background(session_t *ps, struct managed_win *w) 
 	}
 
 	win_set_blur_background(ps, w, blur_background_new);
+}
+
+/**
+ * Determine custom window shader to use for a window.
+ */
+static void win_determine_fg_shader(session_t *ps, struct managed_win *w) {
+	if (w->a.map_state != XCB_MAP_STATE_VIEWABLE)
+		return;
+
+	auto shader_new = ps->o.window_shader_fg;
+	void *val = NULL;
+	if (c2_match(ps, w, ps->o.window_shader_fg_rules, &val)) {
+		shader_new = (struct custom_shader *)val;
+	}
+
+	win_set_fg_shader(ps, w, shader_new);
 }
 
 /**
@@ -1041,6 +1069,7 @@ void win_on_factor_change(session_t *ps, struct managed_win *w) {
 	win_determine_shadow(ps, w);
 	win_determine_invert_color(ps, w);
 	win_determine_blur_background(ps, w);
+	win_determine_fg_shader(ps, w);
 	w->mode = win_calc_mode(w);
 	log_debug("Window mode changed to %d", w->mode);
 	win_update_opacity_rule(ps, w);
@@ -1367,6 +1396,7 @@ struct win *fill_win(session_t *ps, struct win *w) {
 	    .shadow_image = NULL,
 	    .prev_trans = NULL,
 	    .shadow = false,
+	    .fg_shader = NULL,
 	    .xinerama_scr = -1,
 	    .mode = WMODE_TRANS,
 	    .ever_damaged = false,
@@ -2305,6 +2335,8 @@ void map_win_start(session_t *ps, struct managed_win *w) {
 	          w->opacity, w->opacity_target);
 
 	win_determine_blur_background(ps, w);
+
+	win_determine_fg_shader(ps, w);
 
 	// Cannot set w->ever_damaged = false here, since window mapping could be
 	// delayed, so a damage event might have already arrived before this function
