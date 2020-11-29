@@ -556,6 +556,12 @@ char *parse_config_libconfig(options_t *opt, const char *config_file, bool *shad
 			goto err;
 		}
 	}
+	// --inactive-blur
+	if (lcfg_lookup_bool(&cfg, "inactive-blur", &opt->inactive_blur)) {
+		if (opt->blur_method == BLUR_METHOD_NONE) {
+			opt->blur_method = BLUR_METHOD_BOX;
+		}
+	}
 	// --resize-damage
 	config_lookup_int(&cfg, "resize-damage", &opt->resize_damage);
 	// --glx-no-stencil

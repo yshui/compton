@@ -253,6 +253,9 @@ static void usage(const char *argv0, int ret) {
 	    "--blur-background-exclude condition\n"
 	    "  Exclude conditions for background blur.\n"
 	    "\n"
+	    "--inactive-blur\n"
+	    "  Blur the foreground of inactive windows.\n"
+	    "\n"
 	    "--resize-damage integer\n"
 	    "  Resize damaged region by a specific number of pixels. A positive\n"
 	    "  value enlarges it while a negative one shrinks it. Useful for\n"
@@ -440,6 +443,7 @@ static const struct option longopts[] = {
     {"blur-deviation", required_argument, NULL, 330},
     {"blur-strength", required_argument, NULL, 331},
     {"shadow-color", required_argument, NULL, 332},
+    {"inactive-blur", no_argument, NULL, 333},
     {"experimental-backends", no_argument, NULL, 733},
     {"monitor-repaint", no_argument, NULL, 800},
     {"diagnostics", no_argument, NULL, 801},
@@ -858,6 +862,10 @@ bool get_cfg(options_t *opt, int argc, char *const *argv, bool shadow_enable,
 		case 331:
 			// --blur-strength
 			opt->blur_strength = atoi(optarg);
+			break;
+		case 333:
+			// --inactive-blur
+			opt->inactive_blur = true;
 			break;
 
 		P_CASEBOOL(733, experimental_backends);
