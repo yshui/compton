@@ -287,7 +287,7 @@ function toggle_opacity
 
   if test -z "$current_opacity"
   then
-    target_opacity=100
+    test -z "$target_opacity" && target_opacity=100
     set_opacity
   else
     delete_opacity
