@@ -151,58 +151,58 @@ function get_target_window_id
 
   # Get ID of the target window
   if test -z "$winidtype"; then
-	treeout=$(xwininfo -children -frame)
+    treeout=$(xwininfo -children -frame)
   else
-	test "$winidtype" = '-id' \
-	  && ! echo "$winid" | grep -Eiq '^[[:space:]]*(0x[[:xdigit:]]+|[[:digit:]]+)[[:space:]]*$' \
-	  && echo 'Bad window ID.' && exit 1
-	treeout=$(xwininfo -children $winidtype "$winid")
+    test "$winidtype" = '-id' \
+      && ! echo "$winid" | grep -Eiq '^[[:space:]]*(0x[[:xdigit:]]+|[[:digit:]]+)[[:space:]]*$' \
+      && echo 'Bad window ID.' && exit 1
+    treeout=$(xwininfo -children $winidtype "$winid")
   fi
 
   wid=$(echo "$treeout" | sed -n 's/^xwininfo:.*: \(0x[[:xdigit:]]*\).*$/\1/p')
 
   if test -z "$wid"; then
-	echo 'Failed to find window.'
-	exit 1
+    echo 'Failed to find window.'
+    exit 1
   fi
 
   # Make sure it's not root window
   if echo "$treeout" | fgrep -q 'Parent window id: 0x0'; then
-	echo 'Cannot set opacity on root window.'
-	exit 1
+    echo 'Cannot set opacity on root window.'
+    exit 1
   fi
 
   # If it's already the topmost window
   if echo "$treeout" | grep -q 'Parent window id: 0x[[:xdigit:]]* (the root window)'; then
-	topmost=$wid
+    topmost=$wid
   else
-	# Get the whole window tree
-	treeout=$(xwininfo -root -tree)
+    # Get the whole window tree
+    treeout=$(xwininfo -root -tree)
 
-	if test -z "$treeout"; then
-	  echo 'Failed to get root window tree.'
-	  exit 1
-	fi
+    if test -z "$treeout"; then
+      echo 'Failed to get root window tree.'
+      exit 1
+    fi
 
-	# Find the line number of the target window in the window tree
-	lineno=$(echo -n "$treeout" | grep -nw "^\s*$wid" | head -n1 | cut -d ':' -f 1)
+    # Find the line number of the target window in the window tree
+    lineno=$(echo -n "$treeout" | grep -nw "^\s*$wid" | head -n1 | cut -d ':' -f 1)
 
-	if test -z "$lineno"; then
-	  echo 'Failed to find window in window tree.'
-	  exit 1
-	fi
+    if test -z "$lineno"; then
+      echo 'Failed to find window in window tree.'
+      exit 1
+    fi
 
-	# Find the highest ancestor of the target window below
-	topmost=$(echo -n "$treeout" \
-	  | head -n $lineno \
-	  | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p' \
-	  | tail -n 1)
+    # Find the highest ancestor of the target window below
+    topmost=$(echo -n "$treeout" \
+      | head -n $lineno \
+      | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p' \
+      | tail -n 1)
   fi
 
   if test -z "$topmost"; then
-	echo 'Failed to find the highest parent window below root of the' \
-	  'selected window.'
-	exit 1
+    echo 'Failed to find the highest parent window below root of the' \
+      'selected window.'
+    exit 1
   fi
 
   echo "$topmost"
