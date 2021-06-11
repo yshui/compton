@@ -27,9 +27,14 @@
 #   $ picom-trans --reset
 
 
+# Save $0 now to print correct value while printing from functions.
+# Printing errormsgs from functions using "$0" prints the function name
+# instead of the executable name.
+EXE_NAME="$0"
+
 function print_usage
 { #{
-  echo "Usage: $0 [options] [+|-]opacity"
+  echo "Usage: $EXE_NAME [options] [+|-]opacity"
   echo ""
   echo "Options:"
   echo "  -h, --help                Print this help message."
@@ -63,11 +68,11 @@ function parse_args
     # Catch invalid options
     case "$1" in
       (--opacity=|--name=|--window=)
-        echo "$0: option ${1%=} needs a value" >&2
+        echo "$EXE_NAME: option ${1%=} needs a value" >&2
         exit 1;;
       (--opacity|--name|--window)
         test $i -eq $# \
-          && echo "$0: option $1 needs a value" >&2 \
+          && echo "$EXE_NAME: option $1 needs a value" >&2 \
           && exit 1;;
     esac
 
@@ -90,7 +95,7 @@ function parse_args
     # If the argument still starts with --, it is an invalid argument
     case "$1" in
       (--*)
-        echo "$0: illegal option $1" >&2
+        echo "$EXE_NAME: illegal option $1" >&2
         exit 1
     esac
 
@@ -132,7 +137,7 @@ function parse_args
           # It will be handled at next iteration of the loop.
           if echo $OPTARG | grep -q '[[:digit:]]'
           then break
-          else echo "$0: illegal option: $1" >&2 && exit 1
+          else echo "$EXE_NAME: illegal option: $1" >&2 && exit 1
           fi
       esac
 
