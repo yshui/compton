@@ -32,6 +32,7 @@
 # instead of the executable name.
 EXE_NAME="$0"
 
+
 function print_usage
 { #{
   echo "Usage: $EXE_NAME [options] [+|-]opacity"
@@ -158,22 +159,23 @@ function get_target_window_id
   if test -z "$winidtype"; then
     treeout=$(xwininfo -children -frame)
   else
-    test "$winidtype" = '-id' \
+    test "$winidtype" = "-id" \
       && ! echo "$winid" | grep -Eiq '^[[:space:]]*(0x[[:xdigit:]]+|[[:digit:]]+)[[:space:]]*$' \
-      && echo 'Bad window ID.' && exit 1
+      && echo "Bad window ID." >&2 \
+      && exit 1
     treeout=$(xwininfo -children $winidtype "$winid")
   fi
 
   wid=$(echo "$treeout" | sed -n 's/^xwininfo:.*: \(0x[[:xdigit:]]*\).*$/\1/p')
 
   if test -z "$wid"; then
-    echo 'Failed to find window.'
+    echo "Failed to find window." >&2
     exit 1
   fi
 
   # Make sure it's not root window
-  if echo "$treeout" | fgrep -q 'Parent window id: 0x0'; then
-    echo 'Cannot set opacity on root window.'
+  if echo "$treeout" | grep -Fq "Parent window id: 0x0"; then
+    echo "Cannot set opacity on root window." >&2
     exit 1
   fi
 
@@ -185,7 +187,7 @@ function get_target_window_id
     treeout=$(xwininfo -root -tree)
 
     if test -z "$treeout"; then
-      echo 'Failed to get root window tree.'
+      echo "Failed to get root window tree." >&2
       exit 1
     fi
 
@@ -193,7 +195,7 @@ function get_target_window_id
     lineno=$(echo -n "$treeout" | grep -nw "^\s*$wid" | head -n1 | cut -d ':' -f 1)
 
     if test -z "$lineno"; then
-      echo 'Failed to find window in window tree.'
+      echo 'Failed to find window in window tree.' >&2
       exit 1
     fi
 
@@ -205,13 +207,13 @@ function get_target_window_id
   fi
 
   if test -z "$topmost"; then
-    echo 'Failed to find the highest parent window below root of the' \
-      'selected window.'
+    echo "Failed to find the highest parent window below root of the selected window." >&2
     exit 1
   fi
 
   echo "$topmost"
 } #}
+
 
 function get_focused_window_id
 { #{
@@ -227,7 +229,7 @@ function get_current_opacity
 
   # Unset opacity means fully opaque
   test -z "$cur" && cur=0xffffffff
-  cur=$((cur * 100 / 0xffffffff))
+  cur=$(( cur * 100 / 0xffffffff ))
 
   echo "$cur"
 } #}
@@ -248,13 +250,10 @@ function delete_opacity
 
 function reset_opacity  # Reset opacity of all windows
 { #{
-    xwininfo -root -tree \
-    | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p' \
-    | while IFS=$(printf '\n') read wid;
-      do
-        xprop -id "$wid" -remove _NET_WM_WINDOW_OPACITY
-      done
-    exit 0
+  for winid in $(xwininfo -root -tree | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p')
+  do xprop -id "$winid" -remove _NET_WM_WINDOW_OPACITY 2>/dev/null
+  done
+  exit 0
 } #}
 
 function set_opacity
@@ -278,7 +277,7 @@ function set_opacity
   test $target_opacity -lt 0   && target_opacity=0
   test $target_opacity -gt 100 && target_opacity=100
 
-  target_opacity=$((target_opacity * 0xffffffff / 100))
+  target_opacity=$(( target_opacity * 0xffffffff / 100 ))
   xprop -id "$winid" -f _NET_WM_WINDOW_OPACITY 32c \
       -set _NET_WM_WINDOW_OPACITY "$target_opacity"
 
@@ -308,7 +307,7 @@ esac
 
 # "command" is a shell built-in, faster than "which"
 if test -z "$(command -v xprop)" -o -z "$(command -v xwininfo)"; then
-  echo 'The command xwininfo or xprop is not available. They might reside in a package named xwininfo, xprop, x11-utils, xorg-xprop, or xorg-xwininfo.' >&2
+  echo "The command xwininfo or xprop is not available. They might reside in a package named xwininfo, xprop, x11-utils, xorg-xprop, or xorg-xwininfo." >&2
   exit 1
 fi
 
@@ -359,5 +358,6 @@ esac
 # We should never reach this part of the file
 echo "This sentence shouldn't have been printed. Please file a bug report." >&2
 exit 128
+
 
 # vim:ft=sh:ts=4:sts=4:sw=2:et:fdm=marker:fmr=#{,#}:nowrap
