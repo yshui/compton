@@ -33,7 +33,7 @@
 EXE_NAME="$0"
 
 
-function print_usage
+print_usage()
 { #{
   echo "Usage: $EXE_NAME [options] [+|-]opacity"
   echo ""
@@ -58,7 +58,7 @@ function print_usage
 } #}
 
 
-function parse_args
+parse_args()
 { #{
 
   # Iterate over every option and convert
@@ -152,7 +152,7 @@ function parse_args
 
 # NOTE: The code inside the following function has been taken directly from the
 # old version of picom-trans.  Tread cautiously!
-function get_target_window_id
+get_target_window_id()
 { #{
 
   # Get ID of the target window
@@ -215,14 +215,14 @@ function get_target_window_id
 } #}
 
 
-function get_focused_window_id
+get_focused_window_id()
 { #{
   echo "$(xprop -root -notype _NET_ACTIVE_WINDOW \
     | grep -Eo '0x[[:xdigit:]]+' \
     | head -n 1)"
 } #}
 
-function get_current_opacity
+get_current_opacity()
 { #{
   cur="$(xprop -id "$winid" -notype _NET_WM_WINDOW_OPACITY \
     | sed -E 's/^_NET_WM_WINDOW_OPACITY = ([0-9]*)$|^.*$/\1/')"
@@ -236,19 +236,19 @@ function get_current_opacity
 
 
 
-function get_opacity
+get_opacity()
 { #{
   echo "$(get_current_opacity)"
   exit 0
 } #}
 
-function delete_opacity
+delete_opacity()
 { #{
   xprop -id "$winid" -remove _NET_WM_WINDOW_OPACITY
   exit 0
 } #}
 
-function reset_opacity  # Reset opacity of all windows
+reset_opacity()  # Reset opacity of all windows
 { #{
   for winid in $(xwininfo -root -tree | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p')
   do xprop -id "$winid" -remove _NET_WM_WINDOW_OPACITY 2>/dev/null
@@ -256,7 +256,7 @@ function reset_opacity  # Reset opacity of all windows
   exit 0
 } #}
 
-function set_opacity
+set_opacity()
 { #{
   if ! echo "$target_opacity" | grep -qE '^[+-]?[[:digit:]]+%?$'
   then
@@ -284,7 +284,7 @@ function set_opacity
   exit $?
 } #}
 
-function toggle_opacity
+toggle_opacity()
 { #{
   current_opacity="$(xprop -id "$winid" -notype _NET_WM_WINDOW_OPACITY \
     | sed -E 's/^_NET_WM_WINDOW_OPACITY = ([0-9]*)$|^.*$/\1/')"
