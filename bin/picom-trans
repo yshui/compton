@@ -34,7 +34,7 @@ EXE_NAME="$0"
 
 
 print_usage()
-{ #{
+{ #{{
   echo "Usage: $EXE_NAME [options] [+|-]opacity"
   echo ""
   echo "Options:"
@@ -55,11 +55,11 @@ print_usage()
   echo "  -c, --current             Select the currently active window as target."
   echo "  -n, --name WINDOW_NAME    Specify and try to match a window name."
   echo "  -w, --window WINDOW_ID    Specify the window id of the target window."
-} #}
+} #}}
 
 
 parse_args()
-{ #{
+{ #{{
 
   # Iterate over every option and convert
   # longopts (GNU) into POSIX-compatible opts
@@ -149,13 +149,13 @@ parse_args()
       (\?) exit 1
     esac
   done
-} #}
+} #}}
 
 
 # NOTE: The code inside the following function has been taken directly from the
 # old version of picom-trans.  Tread cautiously!
 get_target_window_id()
-{ #{
+{ #{{
 
   # Get ID of the target window
   if test -z "$winidtype"; then
@@ -214,18 +214,18 @@ get_target_window_id()
   fi
 
   echo "$topmost"
-} #}
+} #}}
 
 
 get_focused_window_id()
-{ #{
+{ #{{
   echo "$(xprop -root -notype _NET_ACTIVE_WINDOW \
     | grep -Eo '0x[[:xdigit:]]+' \
     | head -n 1)"
-} #}
+} #}}
 
 get_current_opacity()
-{ #{
+{ #{{
   cur="$(xprop -id "$winid" -notype _NET_WM_WINDOW_OPACITY \
     | sed -E 's/^_NET_WM_WINDOW_OPACITY = ([0-9]*)$|^.*$/\1/')"
 
@@ -234,32 +234,32 @@ get_current_opacity()
   cur=$(( cur * 100 / 0xffffffff ))
 
   echo "$cur"
-} #}
+} #}}
 
 
 
 get_opacity()
-{ #{
+{ #{{
   echo "$(get_current_opacity)"
   exit 0
-} #}
+} #}}
 
 delete_opacity()
-{ #{
+{ #{{
   xprop -id "$winid" -remove _NET_WM_WINDOW_OPACITY
   exit 0
-} #}
+} #}}
 
 reset_opacity()  # Reset opacity of all windows
-{ #{
+{ #{{
   for winid in $(xwininfo -root -tree | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p')
   do xprop -id "$winid" -remove _NET_WM_WINDOW_OPACITY 2>/dev/null
   done
   exit 0
-} #}
+} #}}
 
 set_opacity()
-{ #{
+{ #{{
   if ! echo "$target_opacity" | grep -qE '^[+-]?[[:digit:]]+%?$'
   then
     if test -z "$target_opacity"
@@ -284,10 +284,10 @@ set_opacity()
       -set _NET_WM_WINDOW_OPACITY "$target_opacity"
 
   exit $?
-} #}
+} #}}
 
 toggle_opacity()
-{ #{
+{ #{{
   current_opacity="$(xprop -id "$winid" -notype _NET_WM_WINDOW_OPACITY \
     | sed -E 's/^_NET_WM_WINDOW_OPACITY = ([0-9]*)$|^.*$/\1/')"
 
@@ -298,7 +298,7 @@ toggle_opacity()
   else
     delete_opacity
   fi
-} #}
+} #}}
 
 
 # Warn about rename of compton to picom
@@ -362,4 +362,4 @@ echo "This sentence shouldn't have been printed. Please file a bug report." >&2
 exit 128
 
 
-# vim:ft=sh:ts=4:sts=4:sw=2:et:fdm=marker:fmr=#{,#}:nowrap
+# vim:ft=sh:ts=4:sts=4:sw=2:et:fdm=marker:fmr=#{{,#}}:nowrap
