@@ -194,7 +194,7 @@ get_target_window_id()
     fi
 
     # Find the line number of the target window in the window tree
-    lineno=$(echo -n "$treeout" | grep -nw "^\s*$wid" | head -n1 | cut -d ':' -f 1)
+    lineno=$(printf "%s" "$treeout" | grep -nw "^\s*$wid" | head -n1 | cut -d ':' -f 1)
 
     if test -z "$lineno"; then
       echo 'Failed to find window in window tree.' >&2
@@ -202,7 +202,7 @@ get_target_window_id()
     fi
 
     # Find the highest ancestor of the target window below
-    topmost=$(echo -n "$treeout" \
+    topmost=$(printf "%s" "$treeout" \
       | head -n $lineno \
       | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p' \
       | tail -n 1)
