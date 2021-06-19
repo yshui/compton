@@ -88,8 +88,8 @@ parse_args()
     # Turn into short form
     case "$1" in
       (--help|--opacity|--get|--delete|--toggle|--reset|--select|--current|--name|--window)
-        ARG=${1#-}                      # remove one '-' from prefix
-        ARG="$(echo $ARG | cut -c -2)"  # get first two characters
+        ARG=${1#-}                          # remove one '-' from prefix
+        ARG="$(echo "$ARG" | cut -c -2)"    # get first two characters
         shift && set -- "$ARG" "$@"
     esac
 
@@ -119,7 +119,7 @@ parse_args()
       ! eval "echo \${$#}" | grep -q '^-[hdtrgsnwc]*o$'
     # NOTE: eval "echo \${$#}" means 'echo the last argument'
     # NOTE: The letters inside the square brackets (ie. hdtrgsnwc) are
-    # the same as those in the getopts argument, but without the 'o'
+    #       the same as those in the getopts argument, but without the 'o'
     then
       OPACITY=$1
       shift && set -- "-o" "$OPACITY" "$@"
@@ -203,7 +203,7 @@ get_target_window_id()
 
     # Find the highest ancestor of the target window below
     topmost=$(printf "%s" "$treeout" \
-      | head -n $lineno \
+      | head -n "$lineno" \
       | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p' \
       | tail -n 1)
   fi
@@ -219,9 +219,9 @@ get_target_window_id()
 
 get_focused_window_id()
 { #{{
-  echo "$(xprop -root -notype _NET_ACTIVE_WINDOW \
+  xprop -root -notype _NET_ACTIVE_WINDOW \
     | grep -Eo '0x[[:xdigit:]]+' \
-    | head -n 1)"
+    | head -n 1
 } #}}
 
 get_current_opacity()
@@ -240,7 +240,7 @@ get_current_opacity()
 
 get_opacity()
 { #{{
-  echo "$(get_current_opacity)"
+  get_current_opacity
   exit 0
 } #}}
 
