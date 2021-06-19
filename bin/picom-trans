@@ -106,46 +106,48 @@ parse_args()
     i=$(( i + 1 ))
   done
 
-
-  while test $# -gt 0; do
-    # 15 +15 -15 are opacity values
-    # filter them out here, otherwise getopts will complain
-    if echo "$1" | grep -qE '^[+-]?[[:digit:]]+%?$'; then
-      target_opacity=$1
-      shift
-      continue
+  # Iterate over every argument and check if it is an opacity without the -o
+  # option in the previous argument. If so, then prepend the -o option.
+  # e.g. Turn this -
+  #     picom-trans -c +10 -s
+  # into this -
+  #     picom-trans -c -o +10 -s
+  i=1
+  while [ $i -le $# ]
+  do
+    if echo "$1" | grep -qE '^[+-]?[[:digit:]]+%?$' && \
+      ! eval "echo \${$#}" | grep -q '^-[hdtrgsnwc]*o$'
+    # NOTE: eval "echo \${$#}" means 'echo the last argument'
+    # NOTE: The letters inside the square brackets (ie. hdtrgsnwc) are
+    # the same as those in the getopts argument, but without the 'o'
+    then
+      OPACITY=$1
+      shift && set -- "-o" "$OPACITY" "$@"
     fi
 
-    OPTIND=1
-    while getopts ':ho:gdtrscn:w:' OPTION
-    do
-      case "$OPTION" in
-        (h) print_usage; exit 0;;
-        (o) target_opacity="$OPTARG";;
-        (g) action=get;;
-        (d) action=delete;;
-        (t) action=toggle;;
-        (r) action=reset;;
-        (s) winidtype=;         winid=;;
-        (c) winidtype=-id;      winid="$(get_focused_window_id)";;
-        (n) winidtype=-name;    winid="$OPTARG";;
-        (w) winidtype=-id;      winid="$OPTARG";;
-        (\?)
-          # This might not be an invalid argument.
-          # It could be an opacity value.
-          #
-          # If it is an opacity value,  just break.
-          # It will be handled at next iteration of the loop.
-          if echo $OPTARG | grep -q '[[:digit:]]'
-          then break
-          else echo "$EXE_NAME: illegal option: $1" >&2 && exit 1
-          fi
-      esac
+    # Prepare for next iteration
+    FIRST="$1"
+    shift && set -- "$@" "$FIRST"
+    i=$(( i + 1 ))
+  done
 
-      # If getopts goes to the second argument, stop
-      test $OPTIND -ge 3 && break
-    done
-    shift
+
+  OPTIND=1
+  while getopts 'ho:dtrgsn:w:c' OPTION
+  do
+    case "$OPTION" in
+      (h) print_usage; exit 0;;
+      (o) target_opacity="$OPTARG";;
+      (d) action=delete;;
+      (t) action=toggle;;
+      (r) action=reset;;
+      (g) action=get;;
+      (s) winidtype=;         winid=;;
+      (n) winidtype=-name;    winid="$OPTARG";;
+      (w) winidtype=-id;      winid="$OPTARG";;
+      (c) winidtype=-id;      winid="$(get_focused_window_id)";;
+      (\?) exit 1
+    esac
   done
 } #}
 
