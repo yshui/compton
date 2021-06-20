@@ -356,9 +356,14 @@ case $action in
 esac
 
 # Any other action needs $winid
+#
 # NOTE: Do NOT change the order of winid= and winidtype= below
 #       the output of get_target_window_id depends on $winidtype
-winid=$(get_target_window_id)
+#
+# NOTE: If get_target_window_id returns with a non-zero $?
+#       that must mean that some error occured. So, exit with that same $?
+#
+winid=$(get_target_window_id) || exit $?
 winidtype=-id
 case $action in
   (set)     set_opacity;;
