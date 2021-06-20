@@ -307,8 +307,8 @@ case "$0" in
 esac
 
 
-# "command" is a shell built-in, faster than "which"
-if test -z "$(command -v xprop)" -o -z "$(command -v xwininfo)"; then
+# Check if both xwininfo and xprop are available
+if ! command -v xprop >/dev/null || ! command -v xwininfo >/dev/null; then
   echo "The command xwininfo or xprop is not available. They might reside in a package named xwininfo, xprop, x11-utils, xorg-xprop, or xorg-xwininfo." >&2
   exit 1
 fi
