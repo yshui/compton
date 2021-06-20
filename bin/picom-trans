@@ -208,7 +208,7 @@ get_target_window_id()
     lineno=$(printf "%s" "$treeout" | grep -nw "^\s*$wid" | head -n1 | cut -d ':' -f 1)
 
     if test -z "$lineno"; then
-      echo 'Failed to find window in window tree.' >&2
+      echo "Failed to find window in window tree." >&2
       exit 1
     fi
 
