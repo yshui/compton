@@ -112,14 +112,25 @@ parse_args()
   #     picom-trans -c +10 -s
   # into this -
   #     picom-trans -c -o +10 -s
+  #
+  # NOTE: Don't touch arguments that are preceded by -n or -w
+  #       i.e. don't touch arguments that take a value.
+  # i.e. This -
+  #     picom-trans -w 75 -o 90
+  # should NOT be turned into this -
+  #     picom-trans -w -o 75 -o 90
   i=1
   while [ $i -le $# ]
   do
     if echo "$1" | grep -qE '^[+-]?[[:digit:]]+%?$' && \
-      ! eval "echo \${$#}" | grep -q '^-[hdtrgsnwc]*o$'
-    # NOTE: eval "echo \${$#}" means 'echo the last argument'
-    # NOTE: The letters inside the square brackets (ie. hdtrgsnwc) are
-    #       the same as those in the getopts argument, but without the 'o'
+      ! eval echo "\"\${$#}\"" | grep -q '^-[hdtrgsc]*[own]$'
+    # NOTE: eval echo "\${$#}" means 'echo the last argument'
+    # NOTE: The letters inside the first  square brackets (ie. hdtrgsc) are
+    #       the same as those in the getopts argument, minus those that are
+    #       followed by a ':'
+    # NOTE: The letters inside the second square brackets (ie. own)     are
+    #       the same as those in the getopts argument, minus those that are NOT
+    #       followed by a ':'
     then
       OPACITY=$1
       shift && set -- "-o" "$OPACITY" "$@"
