@@ -60,71 +60,66 @@ print_usage()
 
 parse_args()
 { #{{
-
-  # Iterate over every option and convert
-  # longopts (GNU) into POSIX-compatible opts
   i=1       # because we start from "$1", not from "$0"
   while [ $i -le $# ]
   do
-    # Catch invalid options
-    case "$1" in
-      (--opacity=|--name=|--window=)
-        echo "$EXE_NAME: option ${1%=} needs a value" >&2
-        exit 1;;
-      (--opacity|--name|--window)
-        test $i -eq $# \
-          && echo "$EXE_NAME: option $1 needs a value" >&2 \
-          && exit 1;;
-    esac
+    #### [START] Convert GNU longopts to POSIX equivalents ####
+    if [ "$1" = "--${1##--}" ]  # check if $1 is a longopt
+    then
+      # Catch invalid options
+      case "$1" in
+        (--opacity=|--name=|--window=)
+          echo "$EXE_NAME: option ${1%=} needs a value" >&2
+          exit 1;;
+        (--opacity|--name|--window)
+          test $i -eq $# \
+            && echo "$EXE_NAME: option $1 needs a value" >&2 \
+            && exit 1;;
+      esac
 
-    # Separate  "--ARG=VAL"  into  "--ARG" "VAL"
-    case "$1" in
-      (--opacity=*|--name=*|--window=*)
-        ARG="$(echo "$1" | sed -E 's/(--[^=]+)=.*$/\1/')"
-        VAL="${1##${ARG}=}"
-        shift && set -- "$ARG" "$VAL" "$@"
-    esac
+      # Separate  "--ARG=VAL"  into  "--ARG" "VAL"
+      case "$1" in
+        (--opacity=*|--name=*|--window=*)
+          ARG="$(echo "$1" | sed -E 's/(--[^=]+)=.*$/\1/')"
+          VAL="${1##${ARG}=}"
+          shift && set -- "$ARG" "$VAL" "$@"
+      esac
 
-    # Turn into short form
-    case "$1" in
-      (--help|--opacity|--get|--delete|--toggle|--reset|--select|--current|--name|--window)
-        ARG=${1#-}                          # remove one '-' from prefix
-        ARG="$(echo "$ARG" | cut -c -2)"    # get first two characters
-        shift && set -- "$ARG" "$@"
-    esac
+      # Turn into short form
+      case "$1" in
+        (--help|--opacity|--get|--delete|--toggle|--reset|--select|--current|--name|--window)
+          ARG=${1#-}                          # remove one '-' from prefix
+          ARG="$(echo "$ARG" | cut -c -2)"    # get first two characters
+          shift && set -- "$ARG" "$@"
+      esac
 
-    # If the argument still starts with --, it is an invalid argument
-    case "$1" in
-      (--*)
-        echo "$EXE_NAME: illegal option $1" >&2
-        exit 1
-    esac
+      # If the argument still starts with --, it is an invalid argument
+      case "$1" in
+        (--*)
+          echo "$EXE_NAME: illegal option $1" >&2
+          exit 1
+      esac
+    fi
+    #### [END] Convert GNU longopts to POSIX equivalents ####
 
-    # Prepare for next iteration
-    ARG="$1"
-    shift && set -- "$@" "$ARG"
-    i=$(( i + 1 ))
-  done
 
-  # Iterate over every argument and check if it is an opacity without the -o
-  # option in the previous argument. If so, then prepend the -o option.
-  # e.g. Turn this -
-  #     picom-trans -c +10 -s
-  # into this -
-  #     picom-trans -c -o +10 -s
-  #
-  # NOTE: Don't touch arguments that are preceded by -n or -w
-  #       i.e. don't touch arguments that take a value.
-  # i.e. This -
-  #     picom-trans -w 75 -o 90
-  # should NOT be turned into this -
-  #     picom-trans -w -o 75 -o 90
-  i=1
-  while [ $i -le $# ]
-  do
+    #### [START] Prepend '-o' to  standalone opacity values ####
+    # Iterate over every argument and check if it is an opacity without the -o
+    # option in the previous argument. If so, then prepend the -o option.
+    # e.g. Turn this -
+    #     picom-trans -c +10 -s
+    # into this -
+    #     picom-trans -c -o +10 -s
+    #
+    # NOTE: Don't touch arguments that are preceded by -n or -w
+    #       i.e. don't touch arguments that take a value.
+    # i.e. This -
+    #     picom-trans -w 75 -o 90
+    # should NOT be turned into this -
+    #     picom-trans -w -o 75 -o 90
     if echo "$1" | grep -qE '^[+-]?[[:digit:]]+%?$' && \
       ! eval echo "\"\${$#}\"" | grep -q '^-[hdtrgsc]*[own]$'
-    # NOTE: eval echo "\${$#}" means 'echo the last argument'
+    # NOTE: eval echo \${$#} means 'echo the last argument'
     # NOTE: The letters inside the first  square brackets (ie. hdtrgsc) are
     #       the same as those in the getopts argument, minus those that are
     #       followed by a ':'
@@ -132,13 +127,15 @@ parse_args()
     #       the same as those in the getopts argument, minus those that are NOT
     #       followed by a ':'
     then
-      OPACITY=$1
-      shift && set -- "-o" "$OPACITY" "$@"
+      set -- "$@" "-o"
+      i=$(( i + 1 ))
     fi
+    #### [END] Prepend '-o' to  standalone opacity values ####
+
 
     # Prepare for next iteration
-    FIRST="$1"
-    shift && set -- "$@" "$FIRST"
+    ARG="$1"
+    shift && set -- "$@" "$ARG"
     i=$(( i + 1 ))
   done
 
