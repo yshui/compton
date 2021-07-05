@@ -233,14 +233,13 @@ get_focused_window_id()
 
 get_current_opacity()
 { #{{
+  # Gets current opacity in the range 0-100
+  # Doesn't ouput anything if opacity isn't set
   cur="$(xprop -id "$winid" -notype -f _NET_WM_WINDOW_OPACITY 32c '$0' _NET_WM_WINDOW_OPACITY)"
   cur=${cur#_NET_WM_WINDOW_OPACITY}
   cur=${cur%:*}
-
-  # Unset opacity means fully opaque
-  test -z "$cur" && cur=0xffffffff
-  cur=$(( cur * 100 / 0xffffffff ))
-
+  test -n "$cur" &&
+    cur=$(( cur * 100 / 0xffffffff ))
   echo "$cur"
 } #}}
 
@@ -248,7 +247,9 @@ get_current_opacity()
 
 get_opacity()
 { #{{
-  get_current_opacity
+  cur="$(get_current_opacity)"
+  test -z "$cur" && cur=100     # Unset opacity means fully opaque
+  echo "$cur"
   exit 0
 } #}}
 
@@ -280,8 +281,10 @@ set_opacity()
   # strip trailing '%' sign, if any
   target_opacity="${target_opacity%%%}"
 
-  current_opacity=$(get_current_opacity)
-  echo "$target_opacity" | grep -qE '^[+-]' \
+  current_opacity="$(get_current_opacity)"
+  test -z "$current_opacity" && current_opacity=100
+
+  echo "$target_opacity" | grep -q '^[+-]' \
     && target_opacity=$(( current_opacity + target_opacity ))
 
   test $target_opacity -lt 0   && target_opacity=0
@@ -296,11 +299,7 @@ set_opacity()
 
 toggle_opacity()
 { #{{
-  current_opacity="$(xprop -id "$winid" -notype -f _NET_WM_WINDOW_OPACITY 32c '$0' _NET_WM_WINDOW_OPACITY)"
-  current_opacity=${cur#_NET_WM_WINDOW_OPACITY}
-  current_opacity=${cur%:*}
-
-  if test -z "$current_opacity"
+  if test -z "$(get_current_opacity)"
   then
     test -z "$target_opacity" && target_opacity=100
     set_opacity
