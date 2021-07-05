@@ -227,15 +227,15 @@ get_target_window_id()
 
 get_focused_window_id()
 { #{{
-  xprop -root -notype _NET_ACTIVE_WINDOW \
-    | grep -Eo '0x[[:xdigit:]]+' \
-    | head -n 1
+  id=$(xprop -root -notype -f _NET_ACTIVE_WINDOW 32x '$0' _NET_ACTIVE_WINDOW)
+  echo "${id#_NET_ACTIVE_WINDOW}"
 } #}}
 
 get_current_opacity()
 { #{{
-  cur="$(xprop -id "$winid" -notype _NET_WM_WINDOW_OPACITY \
-    | sed -E 's/^_NET_WM_WINDOW_OPACITY = ([0-9]*)$|^.*$/\1/')"
+  cur="$(xprop -id "$winid" -notype -f _NET_WM_WINDOW_OPACITY 32c '$0' _NET_WM_WINDOW_OPACITY)"
+  cur=${cur#_NET_WM_WINDOW_OPACITY}
+  cur=${cur%:*}
 
   # Unset opacity means fully opaque
   test -z "$cur" && cur=0xffffffff
@@ -296,8 +296,9 @@ set_opacity()
 
 toggle_opacity()
 { #{{
-  current_opacity="$(xprop -id "$winid" -notype _NET_WM_WINDOW_OPACITY \
-    | sed -E 's/^_NET_WM_WINDOW_OPACITY = ([0-9]*)$|^.*$/\1/')"
+  current_opacity="$(xprop -id "$winid" -notype -f _NET_WM_WINDOW_OPACITY 32c '$0' _NET_WM_WINDOW_OPACITY)"
+  current_opacity=${cur#_NET_WM_WINDOW_OPACITY}
+  current_opacity=${cur%:*}
 
   if test -z "$current_opacity"
   then
