@@ -281,11 +281,12 @@ set_opacity()
   # strip trailing '%' sign, if any
   target_opacity="${target_opacity%%%}"
 
-  current_opacity="$(get_current_opacity)"
-  test -z "$current_opacity" && current_opacity=100
-
-  echo "$target_opacity" | grep -q '^[+-]' \
-    && target_opacity=$(( current_opacity + target_opacity ))
+  if echo "$target_opacity" | grep -q '^[+-]'
+  then
+    current_opacity="$(get_current_opacity)"
+    test -z "$current_opacity" && current_opacity=100
+    target_opacity=$(( current_opacity + target_opacity ))
+  fi
 
   test $target_opacity -lt 0   && target_opacity=0
   test $target_opacity -gt 100 && target_opacity=100
