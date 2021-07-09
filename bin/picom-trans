@@ -118,8 +118,8 @@ parse_args()
     # should NOT be turned into this -
     #     picom-trans -w -o 75 -o 90
     if echo "$1" | grep -qE '^[+-]?[[:digit:]]+%?$' && \
-      ! eval echo "\"\${$#}\"" | grep -q '^-[hdtrgsc]*[own]$'
-    # NOTE: eval echo \${$#} means 'echo the last argument'
+      ! eval "printf '%s' \"\${$#}\"" | grep -q '^-[hdtrgsc]*[own]$'
+    # NOTE: eval "printf '%s' \"\${$#}\""  means 'print the last argument'
     # NOTE: The letters inside the first  square brackets (ie. hdtrgsc) are
     #       the same as those in the getopts argument, minus those that are
     #       followed by a ':'
