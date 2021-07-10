@@ -91,19 +91,19 @@ static bool vsync_opengl_oml_init(session_t *ps) {
 }
 
 static inline bool vsync_opengl_swc_swap_interval(session_t *ps, int interval) {
-	if (glxext.has_GLX_MESA_swap_control)
-		return glXSwapIntervalMESA((uint)interval) == 0;
-	else if (glxext.has_GLX_SGI_swap_control)
-		return glXSwapIntervalSGI(interval) == 0;
-	else if (glxext.has_GLX_EXT_swap_control) {
+	if (glxext.has_GLX_EXT_swap_control) {
 		GLXDrawable d = glXGetCurrentDrawable();
 		if (d == None) {
 			// We don't have a context??
 			return false;
 		}
-		glXSwapIntervalEXT(ps->dpy, glXGetCurrentDrawable(), interval);
+		glXSwapIntervalEXT(ps->dpy, glXGetCurrentDrawable(), glxext.has_GLX_EXT_swap_control_tear ? -interval : interval);
 		return true;
 	}
+	else if (glxext.has_GLX_MESA_swap_control)
+		return glXSwapIntervalMESA((uint)interval) == 0;
+	else if (glxext.has_GLX_SGI_swap_control)
+		return glXSwapIntervalSGI(interval) == 0;
 	return false;
 }
 
