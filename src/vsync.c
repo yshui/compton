@@ -151,7 +151,7 @@ static int vsync_opengl_oml_wait(session_t *ps) {
  */
 bool vsync_init(session_t *ps) {
 #ifdef CONFIG_OPENGL
-	if (bkend_use_glx(ps)) {
+	if (bkend_use_glx(ps) && !(ps->drivers & DRIVER_NVIDIA)) {
 		// Mesa turns on swap control by default, undo that
 		vsync_opengl_swc_swap_interval(ps, 0);
 	}
