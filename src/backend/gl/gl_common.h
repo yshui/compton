@@ -22,6 +22,7 @@ typedef struct {
 	GLint unifm_dim;
 	GLint unifm_brightness;
 	GLint unifm_max_brightness;
+	GLint unifm_corner_radius;
 } gl_win_shader_t;
 
 // Program and uniforms for brightness shader

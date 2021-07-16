@@ -401,6 +401,9 @@ static void _gl_compose(backend_t *base, struct backend_image *img, GLuint targe
 	if (gd->win_shader.unifm_max_brightness >= 0) {
 		glUniform1f(gd->win_shader.unifm_max_brightness, (float)img->max_brightness);
 	}
+	if (gd->win_shader.unifm_corner_radius >= 0) {
+		glUniform1f(gd->win_shader.unifm_corner_radius, (float)img->corner_radius);
+	}
 
 	// log_trace("Draw: %d, %d, %d, %d -> %d, %d (%d, %d) z %d\n",
 	//          x, y, width, height, dx, dy, ptex->width, ptex->height, z);
@@ -926,6 +929,8 @@ static int gl_win_shader_from_string(const char *vshader_str, const char *fshade
 	ret->unifm_brightness = glGetUniformLocationChecked(ret->prog, "brightness");
 	ret->unifm_max_brightness =
 	    glGetUniformLocationChecked(ret->prog, "max_brightness");
+	ret->unifm_corner_radius =
+	    glGetUniformLocationChecked(ret->prog, "corner_radius");
 
 	glUseProgram(ret->prog);
 	int orig_loc = glGetUniformLocation(ret->prog, "orig");
@@ -1569,11 +1574,18 @@ void gl_get_blur_size(void *blur_context, int *width, int *height) {
 const char *win_shader_glsl = GLSL(330,
 	uniform float opacity;
 	uniform float dim;
+	uniform float corner_radius;
 	uniform bool invert_color;
 	in vec2 texcoord;
 	uniform sampler2D tex;
 	uniform sampler2D brightness;
 	uniform float max_brightness;
+	// Signed distance field for rectangle center at (0, 0), with size of
+	// half_size * 2
+	float rectangle_sdf(vec2 point, vec2 half_size) {
+		vec2 d = abs(point) - half_size;
+		return length(max(d, 0.0));
+	}
 
 	void main() {
 		vec4 c = texelFetch(tex, ivec2(texcoord), 0);
@@ -1589,6 +1601,12 @@ const char *win_shader_glsl = GLSL(330,
 		                   rgb_brightness.b * 0.07;
 		if (brightness > max_brightness)
 			c.rgb = c.rgb * (max_brightness / brightness);
+
+		vec2 outer_size = vec2(textureSize(tex, 0));
+		vec2 inner_size = outer_size - vec2(corner_radius) * 2.0f;
+		float rect_distance = rectangle_sdf(texcoord - outer_size / 2.0f,
+		    inner_size / 2.0f) - corner_radius;
+		c *= 1.0f - clamp(rect_distance, 0.0f, 1.0f);
 
 		gl_FragColor = c;
 	}
