@@ -37,6 +37,7 @@ struct backend_image {
 	double opacity;
 	double dim;
 	double max_brightness;
+	double corner_radius;
 	// Effective size of the image
 	int ewidth, eheight;
 	bool color_inverted;

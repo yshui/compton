@@ -36,6 +36,7 @@ typedef void (*backend_ready_callback_t)(void *);
 // particular order:
 //
 // Color inversion -> Dimming -> Opacity multiply -> Limit maximum brightness
+// (Corner radius could be applied in any order)
 enum image_properties {
 	// Whether the color of the image is inverted
 	// 1 boolean, default: false
@@ -54,6 +55,9 @@ enum image_properties {
 	// brightness down to the max brightness value.
 	// 1 double, default: 1
 	IMAGE_PROPERTY_MAX_BRIGHTNESS,
+	// Gives the image a rounded corner.
+	// 1 double, default: 0
+	IMAGE_PROPERTY_CORNER_RADIUS,
 };
 
 enum image_operations {
