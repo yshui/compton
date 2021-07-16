@@ -449,6 +449,7 @@ bool default_set_image_property(backend_t *base attr_unused, enum image_properti
 		tex->ewidth = iargs[0];
 		tex->eheight = iargs[1];
 		break;
+	case IMAGE_PROPERTY_CORNER_RADIUS: tex->corner_radius = dargs[0]; break;
 	case IMAGE_PROPERTY_MAX_BRIGHTNESS: tex->max_brightness = dargs[0]; break;
 	}
 
