@@ -2,8 +2,8 @@
 
 #
 # picom-trans
-# transset in a bash script
-# Copyright (c) 2011-2012, Christopher Jeffrey
+# Copyright (c) 2021, Subhaditya Nath
+# Based on previous works of Christopher Jeffrey
 #
 
 # Usage:
@@ -25,17 +25,26 @@
 #   $ picom-trans -c --toggle 90
 # Reset all windows
 #   $ picom-trans --reset
-print_usage() {
-  echo "Usage: $0 [options] [+|-]opacity"
+
+
+# Save $0 now to print correct value while printing from functions.
+# Printing errormsgs from functions using "$0" prints the function name
+# instead of the executable name.
+EXE_NAME="$0"
+
+
+print_usage()
+{ #{{
+  echo "Usage: $EXE_NAME [options] [+|-]opacity"
   echo ""
   echo "Options:"
   echo "  -h, --help                Print this help message."
-  echo "  -o, --opacity OPACITY     Specify the new opacity value in range 1-100 for the window. If"
-  echo "                            prefixed with + or -, increment or decrement from the target"
-  echo "                            window’s current opacity."
+  echo "  -o, --opacity OPACITY     Specify the new opacity value in range 0-100 for the window. If"
+  echo "                            prefixed with + or -, increment or decrement from the current"
+  echo "                            opacity of the target window."
   echo ""
   echo "Actions:"
-  echo "  -g, --get                 Print the target window's opacity."
+  echo "  -g, --get                 Print current opacity of the target window."
   echo "  -d, --delete              Delete opacity of the target window."
   echo "  -t, --toggle              Toggle the target window's opacity, i.e. set if not already set"
   echo "                            and delete else."
@@ -46,194 +55,325 @@ print_usage() {
   echo "  -c, --current             Select the currently active window as target."
   echo "  -n, --name WINDOW_NAME    Specify and try to match a window name."
   echo "  -w, --window WINDOW_ID    Specify the window id of the target window."
-}
+} #}}
 
-case "$0" in
-  *compton-trans*)  echo "Warning: compton has been renamed, please use picom-trans instead" >& 2;;
-esac
 
-# "command" is a shell built-in, faster than "which"
-if test -z "$(command -v xprop)" -o -z "$(command -v xwininfo)"; then
-  echo 'The command xwininfo or xprop is not available. They might reside in a package named xwininfo, xprop, x11-utils, xorg-xprop, or xorg-xwininfo.' >& 2
-  exit 1
-fi
-
-if test $# -eq 0; then
-  print_usage >& 2
-  exit 1
-fi
-
-# Variables
-active=
-wprefix=
-window=
-opacity=
-cur=
-action=
-treeout=
-wid=
-topmost=
-lineno=
-option=
-v=
-
-# We make getopts stop on any argument it doesn't recognize
-# or errors on. This allows for things like `picom-trans -5`
-# as well as `picom-trans -c +5 -s` (contrived example).
-while test $# -gt 0; do
-  # Reset option index
-  OPTIND=1
-
-  # Read options
-  while getopts ':hscrtdgn:w:o:-:' option "$@"; do
-    if test "$option" = '-'; then
-      case "$OPTARG" in
-        help | select | current | reset | toggle | delete | get)
-          v=''
-        ;;
-        name | window | opacity)
-          eval v=\$$OPTIND
-          OPTIND=$((OPTIND + 1))
-        ;;
-        name=* | window=* | opacity=*)
-          v=$(echo "$OPTARG" | sed -E 's/^[^=]+=//')
-        ;;
-        *)
-          echo "$0: illegal option $OPTARG" >& 2
-          exit 1
-        ;;
+parse_args()
+{ #{{
+  i=1       # because we start from "$1", not from "$0"
+  while [ $i -le $# ]
+  do
+    #### [START] Convert GNU longopts to POSIX equivalents ####
+    if [ "$1" = "--${1##--}" ]  # check if $1 is a longopt
+    then
+      # Catch invalid options
+      case "$1" in
+        (--opacity=|--name=|--window=)
+          echo "$EXE_NAME: option ${1%=} needs a value" >&2
+          exit 1;;
+        (--opacity|--name|--window)
+          test $i -eq $# \
+            && echo "$EXE_NAME: option $1 needs a value" >&2 \
+            && exit 1;;
       esac
-      option=$(echo "$OPTARG" | cut -c 1)
-      OPTARG=$v
+
+      # Separate  "--ARG=VAL"  into  "--ARG" "VAL"
+      case "$1" in
+        (--opacity=*|--name=*|--window=*)
+          ARG="$(echo "$1" | sed -E 's/(--[^=]+)=.*$/\1/')"
+          VAL="${1##${ARG}=}"
+          shift && set -- "$ARG" "$VAL" "$@"
+      esac
+
+      # Turn into short form
+      case "$1" in
+        (--help|--opacity|--get|--delete|--toggle|--reset|--select|--current|--name|--window)
+          ARG=${1#-}                          # remove one '-' from prefix
+          ARG="$(echo "$ARG" | cut -c -2)"    # get first two characters
+          shift && set -- "$ARG" "$@"
+      esac
+
+      # If the argument still starts with --, it is an invalid argument
+      case "$1" in
+        (--*)
+          echo "$EXE_NAME: illegal option $1" >&2
+          exit 1
+      esac
     fi
-    case "$option" in
-      h) print_usage; exit 0 ;;
-      s) wprefix=''; window='' ;;
-      c)
-        active=$(xprop -root -notype _NET_ACTIVE_WINDOW \
-          | grep -Eo '0x[[:xdigit:]]+' | head -n 1)
-        wprefix='-id'; window=$active
-      ;;
-      r) action='reset' ;;
-      t) action='toggle' ;;
-      d) action='delete' ;;
-      g) action='get' ;;
-      n) wprefix='-name'; window=$OPTARG ;;
-      w) wprefix='-id'; window=$OPTARG ;;
-      o) opacity=$OPTARG ;;
-      \?) break ;;
+    #### [END] Convert GNU longopts to POSIX equivalents ####
+
+
+    #### [START] Prepend '-o' to  standalone opacity values ####
+    # Iterate over every argument and check if it is an opacity without the -o
+    # option in the previous argument. If so, then prepend the -o option.
+    # e.g. Turn this -
+    #     picom-trans -c +10 -s
+    # into this -
+    #     picom-trans -c -o +10 -s
+    #
+    # NOTE: Don't touch arguments that are preceded by -n or -w
+    #       i.e. don't touch arguments that take a value.
+    # i.e. This -
+    #     picom-trans -w 75 -o 90
+    # should NOT be turned into this -
+    #     picom-trans -w -o 75 -o 90
+    if echo "$1" | grep -qE '^[+-]?[[:digit:]]+%?$' && \
+      ! eval "printf '%s' \"\${$#}\"" | grep -q '^-[hdtrgsc]*[own]$'
+    # NOTE: eval "printf '%s' \"\${$#}\""  means 'print the last argument'
+    # NOTE: The letters inside the first  square brackets (ie. hdtrgsc) are
+    #       the same as those in the getopts argument, minus those that are
+    #       followed by a ':'
+    # NOTE: The letters inside the second square brackets (ie. own)     are
+    #       the same as those in the getopts argument, minus those that are NOT
+    #       followed by a ':'
+    then
+      set -- "$@" "-o"
+      i=$(( i + 1 ))
+    fi
+    #### [END] Prepend '-o' to  standalone opacity values ####
+
+
+    # Prepare for next iteration
+    ARG="$1"
+    shift && set -- "$@" "$ARG"
+    i=$(( i + 1 ))
+  done
+
+
+  OPTIND=1
+  while getopts 'ho:dtrgsn:w:c' OPTION
+  do
+    case "$OPTION" in
+      (h) print_usage; exit 0;;
+      (o) target_opacity="$OPTARG";;
+      (d) action=delete;;
+      (t) action=toggle;;
+      (r) action=reset;;
+      (g) action=get;;
+      (s) winidtype=;         winid=;;
+      (n) winidtype=-name;    winid="$OPTARG";;
+      (w) winidtype=-id;      winid="$OPTARG";;
+      (c) winidtype=-id;      winid="$(get_focused_window_id)";;
+      (\?) exit 1
     esac
   done
+} #}}
 
-  # Read positional arguments
-  shift $((OPTIND - 1))
-  test -n "$1" && opacity=$1 && shift
-done
 
-# clean up opacity. xargs == a poor man's trim.
-opacity=$(echo "$opacity" | xargs | sed 's/%//g')
+# NOTE: The code inside the following function has been taken directly from the
+# old version of picom-trans.  Tread cautiously!
+get_target_window_id()
+{ #{{
 
-# Validate opacity value
-if test -z "$action" && ! echo "$opacity" | grep -qE '^[+-]?[0-9]+$'; then
-  echo "Invalid opacity specified: $opacity."
-  exit 1
-fi
+  # Get ID of the target window
+  if test -z "$winidtype"; then
+    treeout=$(xwininfo -children -frame)
+  else
+    test "$winidtype" = "-id" \
+      && ! echo "$winid" | grep -Eiq '^[[:space:]]*(0x[[:xdigit:]]+|[[:digit:]]+)[[:space:]]*$' \
+      && echo "Bad window ID." >&2 \
+      && exit 1
+    treeout=$(xwininfo -children $winidtype "$winid")
+  fi
 
-# Reset opacity for all windows
-if test x"$action" = x'reset'; then
-  xwininfo -root -tree \
-  | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p' \
-  | while IFS=$(printf '\n') read wid; do
-    xprop -id "$wid" -remove _NET_WM_WINDOW_OPACITY
-  done
-  exit 0
-fi
+  wid=$(echo "$treeout" | sed -n 's/^xwininfo:.*: \(0x[[:xdigit:]]*\).*$/\1/p')
 
-# Get ID of the target window
-if test -z "$wprefix"; then
-  treeout=$(xwininfo -children -frame)
-else
-  test "$wprefix" = '-id' \
-    && ! echo "$window" | grep -Eiq '^[[:space:]]*(0x[[:xdigit:]]+|[[:digit:]]+)[[:space:]]*$' \
-    && echo 'Bad window ID.' && exit 1
-  treeout=$(xwininfo -children $wprefix "$window")
-fi
-
-wid=$(echo "$treeout" | sed -n 's/^xwininfo:.*: \(0x[[:xdigit:]]*\).*$/\1/p')
-
-if test -z "$wid"; then
-  echo 'Failed to find window.'
-  exit 1
-fi
-
-# Make sure it's not root window
-if echo "$treeout" | fgrep -q 'Parent window id: 0x0'; then
-  echo 'Cannot set opacity on root window.'
-  exit 1
-fi
-
-# If it's already the topmost window
-if echo "$treeout" | grep -q 'Parent window id: 0x[[:xdigit:]]* (the root window)'; then
-  topmost=$wid
-else
-  # Get the whole window tree
-  treeout=$(xwininfo -root -tree)
-
-  if test -z "$treeout"; then
-    echo 'Failed to get root window tree.'
+  if test -z "$wid"; then
+    echo "Failed to find window." >&2
     exit 1
   fi
 
-  # Find the line number of the target window in the window tree
-  lineno=$(echo -n "$treeout" | grep -nw "^\s*$wid" | head -n1 | cut -d ':' -f 1)
-
-  if test -z "$lineno"; then
-    echo 'Failed to find window in window tree.'
+  # Make sure it's not root window
+  if echo "$treeout" | grep -Fq "Parent window id: 0x0"; then
+    echo "Cannot set opacity on root window." >&2
     exit 1
   fi
 
-  # Find the highest ancestor of the target window below
-  topmost=$(echo -n "$treeout" \
-    | head -n $lineno \
-    | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p' \
-    | tail -n 1)
-fi
+  # If it's already the topmost window
+  if echo "$treeout" | grep -q 'Parent window id: 0x[[:xdigit:]]* (the root window)'; then
+    topmost=$wid
+  else
+    # Get the whole window tree
+    treeout=$(xwininfo -root -tree)
 
-if test -z "$topmost"; then
-  echo 'Failed to find the highest parent window below root of the' \
-    'selected window.'
-  exit 1
-fi
+    if test -z "$treeout"; then
+      echo "Failed to get root window tree." >&2
+      exit 1
+    fi
 
-# Get current opacity.
-cur=$(xprop -id "$topmost" -notype _NET_WM_WINDOW_OPACITY \
-  | sed -E 's/^_NET_WM_WINDOW_OPACITY = ([0-9]*)$|^.*$/\1/')
+    # Find the line number of the target window in the window tree
+    lineno=$(printf "%s" "$treeout" | grep -nw "^\s*$wid" | head -n1 | cut -d ':' -f 1)
 
-# Remove the opacity property.
-if test x"$action" = x'delete' -o \( x"$action" = x'toggle' -a -n "$cur" \); then
-  xprop -id "$topmost" -remove _NET_WM_WINDOW_OPACITY
-  exit 0
-fi
+    if test -z "$lineno"; then
+      echo "Failed to find window in window tree." >&2
+      exit 1
+    fi
 
-# Unset opacity equals fully opaque
-test -z "$cur" && cur=0xffffffff
-cur=$((cur * 100 / 0xffffffff))
+    # Find the highest ancestor of the target window below
+    topmost=$(printf "%s" "$treeout" \
+      | head -n "$lineno" \
+      | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p' \
+      | tail -n 1)
+  fi
 
-# Output current opacity.
-if test x"$action" = x'get'; then
+  if test -z "$topmost"; then
+    echo "Failed to find the highest parent window below root of the selected window." >&2
+    exit 1
+  fi
+
+  echo "$topmost"
+} #}}
+
+
+get_focused_window_id()
+{ #{{
+  id=$(xprop -root -notype -f _NET_ACTIVE_WINDOW 32x '$0' _NET_ACTIVE_WINDOW)
+  echo "${id#_NET_ACTIVE_WINDOW}"
+} #}}
+
+get_current_opacity()
+{ #{{
+  # Gets current opacity in the range 0-100
+  # Doesn't ouput anything if opacity isn't set
+  cur="$(xprop -id "$winid" -notype -f _NET_WM_WINDOW_OPACITY 32c '$0' _NET_WM_WINDOW_OPACITY)"
+  cur=${cur#_NET_WM_WINDOW_OPACITY}
+  cur=${cur%:*}
+  test -n "$cur" &&
+    cur=$(( cur * 100 / 0xffffffff ))
+  echo "$cur"
+} #}}
+
+
+
+get_opacity()
+{ #{{
+  cur="$(get_current_opacity)"
+  test -z "$cur" && cur=100     # Unset opacity means fully opaque
   echo "$cur"
   exit 0
+} #}}
+
+delete_opacity()
+{ #{{
+  xprop -id "$winid" -remove _NET_WM_WINDOW_OPACITY
+  exit 0
+} #}}
+
+reset_opacity()  # Reset opacity of all windows
+{ #{{
+  for winid in $(xwininfo -root -tree | sed -n 's/^     \(0x[[:xdigit:]]*\).*/\1/p')
+  do xprop -id "$winid" -remove _NET_WM_WINDOW_OPACITY 2>/dev/null
+  done
+  exit 0
+} #}}
+
+set_opacity()
+{ #{{
+  if ! echo "$target_opacity" | grep -qE '^[+-]?[[:digit:]]+%?$'
+  then
+    if test -z "$target_opacity"
+    then echo "No opacity specified" >&2
+    else echo "Invalid opacity specified: $target_opacity" >&2
+    fi
+    exit 1
+  fi
+
+  # strip trailing '%' sign, if any
+  target_opacity="${target_opacity%%%}"
+
+  if echo "$target_opacity" | grep -q '^[+-]'
+  then
+    current_opacity="$(get_current_opacity)"
+    test -z "$current_opacity" && current_opacity=100
+    target_opacity=$(( current_opacity + target_opacity ))
+  fi
+
+  test $target_opacity -lt 0   && target_opacity=0
+  test $target_opacity -gt 100 && target_opacity=100
+
+  target_opacity=$(( target_opacity * 0xffffffff / 100 ))
+  xprop -id "$winid" -f _NET_WM_WINDOW_OPACITY 32c \
+      -set _NET_WM_WINDOW_OPACITY "$target_opacity"
+
+  exit $?
+} #}}
+
+toggle_opacity()
+{ #{{
+  if test -z "$(get_current_opacity)"
+  then
+    test -z "$target_opacity" && target_opacity=100
+    set_opacity
+  else
+    delete_opacity
+  fi
+} #}}
+
+
+# Warn about rename of compton to picom
+case "$0" in
+  *compton-trans*)  echo "Warning: compton has been renamed, please use picom-trans instead" >&2;;
+esac
+
+
+# Check if both xwininfo and xprop are available
+if ! command -v xprop >/dev/null || ! command -v xwininfo >/dev/null; then
+  echo "The command xwininfo or xprop is not available. They might reside in a package named xwininfo, xprop, x11-utils, xorg-xprop, or xorg-xwininfo." >&2
+  exit 1
 fi
 
-# Calculate the desired opacity
-if echo "$opacity" | grep -q '^[+-]'; then
-  opacity=$((cur + opacity))
+
+# No arguments given. Show help.
+if test $# -eq 0; then
+  print_usage >&2
+  exit 1
 fi
 
-test $opacity -lt 0 && opacity=0
-test $opacity -gt 100 && opacity=100
 
-# Set opacity
-opacity=$((opacity * 0xffffffff / 100))
-xprop -id "$topmost" -f _NET_WM_WINDOW_OPACITY 32c \
-  -set _NET_WM_WINDOW_OPACITY "$opacity"
+# Variables
+#   action is set to 'set' by default
+action=set
+winid=
+winidtype=
+target_opacity=
+
+# If there's only one argument, and it's a valid opacity
+# then take it as target_opacity.  Else, parse all arguments.
+if test $# -eq 1 && echo "$1" | grep -qE '^[+-]?[[:digit:]]+%?$'
+then
+  target_opacity=$1
+  shift
+else
+  parse_args "$@"
+fi
+
+
+# reset_opacity doesn't need $winid
+case $action in
+  (reset)   reset_opacity;;
+esac
+
+# Any other action needs $winid
+#
+# NOTE: Do NOT change the order of winid= and winidtype= below
+#       the output of get_target_window_id depends on $winidtype
+#
+# NOTE: If get_target_window_id returns with a non-zero $?
+#       that must mean that some error occured. So, exit with that same $?
+#
+winid=$(get_target_window_id) || exit $?
+winidtype=-id
+case $action in
+  (set)     set_opacity;;
+  (get)     get_opacity;;
+  (delete)  delete_opacity;;
+  (toggle)  toggle_opacity;;
+esac
+
+
+# We should never reach this part of the file
+echo "This sentence shouldn't have been printed. Please file a bug report." >&2
+exit 128
+
+
+# vim:ft=sh:ts=4:sts=4:sw=2:et:fdm=marker:fmr=#{{,#}}:nowrap
